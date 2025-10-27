@@ -1,0 +1,36 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Services\RegistrationService;
+use App\Http\Requests\RegisterUserRequest;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Routing\Controller;
+
+class AuthController extends Controller
+{
+    protected RegistrationService $registrationService;
+
+    public function __construct(RegistrationService $registrationService)
+    {
+        $this->registrationService = $registrationService;
+    }
+
+    public function register(RegisterUserRequest $request): JsonResponse
+{
+    \Log::info('Registration request received', $request->all());
+    
+    $registrationResult = $this->registrationService->registerUser($request->validated());
+
+    \Log::info('Registration result', $registrationResult);
+
+    $statusCode = $registrationResult['status_code'];
+    $response = [
+        'status' => $registrationResult['success'] ? 'success' : 'error',
+        'message' => $registrationResult['message'],
+        'data' => $registrationResult['data']
+    ];
+
+    return response()->json($response, $statusCode);
+}
+}

@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mentor Institute of Technologies</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              'brand-navy': '#192a56',
+              'brand-purple': '#805AD5',
+              'brand-light': '#f7fafc',
+            },
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+              calligraphy: ['Cinzel', 'serif'],
+            }
+          }
+        }
+      }
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Cinzel:wght@700&display=swap" rel="stylesheet">
+    <style>
+      @keyframes pulse-subtle {
+        50% {
+          transform: scale(1.03);
+        }
+      }
+      .animate-pulse-subtle {
+        animation: pulse-subtle 2.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+      }
+      @keyframes fadeInUp {
+        from {
+          opacity: 0;
+          transform: translateY(30px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      .section-animate {
+        opacity: 0;
+        animation: fadeInUp 0.8s ease-out forwards;
+      }
+      @keyframes scroll {
+        0% { transform: translateX(0); }
+        100% { transform: translateX(-50%); }
+      }
+      .animate-scroll {
+        animation: scroll 60s linear infinite;
+      }
+      .scrolling-wrapper:hover .animate-scroll {
+        animation-play-state: paused;
+      }
+      @keyframes highlight-pulse {
+        0% { box-shadow: 0 0 0 0px rgba(128, 90, 213, 0.7); }
+        70% { box-shadow: 0 0 0 10px rgba(128, 90, 213, 0); }
+        100% { box-shadow: 0 0 0 0px rgba(128, 90, 213, 0); }
+      }
+      .highlight-course {
+        animation: highlight-pulse 1.5s 2;
+        border: 2px solid #805AD5;
+      }
+
+      /* Test Result Animations */
+      @keyframes confetti-fall {
+        0% { transform: translateY(-100%) rotate(0deg); opacity: 1; }
+        100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+      }
+      .confetti {
+        position: absolute;
+        width: 10px;
+        height: 10px;
+        background-color: #f00; /* Will be overridden by inline style */
+        opacity: 0;
+        animation: confetti-fall 5s ease-out infinite;
+      }
+      @keyframes result-icon-grow {
+        from { transform: scale(0.5); opacity: 0; }
+        to { transform: scale(1); opacity: 1; }
+      }
+      .animate-result-icon {
+        animation: result-icon-grow 0.5s ease-out forwards;
+      }
+      @keyframes score-pop-in {
+        0% { transform: scale(0.8); opacity: 0; }
+        60% { transform: scale(1.1); opacity: 1; }
+        100% { transform: scale(1); opacity: 1; }
+      }
+      .animate-score-pop {
+          animation: score-pop-in 0.6s ease-out 0.3s forwards;
+          opacity: 0; /* Initially hidden */
+      }
+
+      /* Professional Winner Page Animations */
+      @keyframes podium-fade-in-up {
+        from {
+          opacity: 0;
+          transform: translateY(20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      .animate-podium-fade-in-up {
+        animation: podium-fade-in-up 0.6s ease-out forwards;
+        opacity: 0;
+      }
+
+      @keyframes professional-confetti-fall {
+          0% { transform: translateY(-10vh) rotate(0deg); opacity: 0; }
+          10% { opacity: 1; }
+          100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
+      }
+      .professional-confetti {
+          position: absolute;
+          width: 8px;
+          height: 16px;
+          opacity: 0;
+          animation: professional-confetti-fall 15s linear infinite;
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://aistudiocdn.com/react@^19.1.1/",
+    "react": "https://aistudiocdn.com/react@^19.1.1",
+    "react-router-dom": "https://aistudiocdn.com/react-router-dom@^7.9.3",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.1.1/"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body class="bg-brand-light">
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>
