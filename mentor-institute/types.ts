@@ -4,13 +4,12 @@ export interface Course {
   id: number;
   title: string;
   description: string;
-  // Fix: Replaced React.ReactNode with ReactNode as React namespace is not available here.
-  icon: ReactNode;
+  price: number;
   duration: string;
   level: string;
   image: string;
-  price: number;
-  syllabus?: Subject[];
+  icon: any;
+  syllabus: string[];
 }
 
 export interface GalleryItem {

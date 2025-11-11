@@ -1,59 +1,88 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { users } from '../../data/mockData';
 import type { Partner } from '../../types';
 import AddEditPartnerModal from '../../components/AddEditPartnerModal';
 import ConfirmationModal from '../../components/ConfirmationModal';
 import { useSearch } from '../../context/SearchContext';
-import { registerUser } from '../../services/api'; // Import your API function
+import { getPartners, updatePartner, deletePartner } from '../../services/api'; // ✅ Updated imports
 
 const ManagePartners: React.FC = () => {
-  const [partners, setPartners] = useState<Partner[]>(users.filter(u => u.role === 'partner') as Partner[]);
+  const [partners, setPartners] = useState<Partner[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingPartner, setEditingPartner] = useState<Partner | null>(null);
   const [deletingPartner, setDeletingPartner] = useState<Partner | null>(null);
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState('');
+  const [fetchLoading, setFetchLoading] = useState(true);
   const { searchQuery } = useSearch();
 
+  // Fetch partners from API on mount
+  useEffect(() => {
+    const fetchPartners = async () => {
+      try {
+        setFetchLoading(true);
+        setApiError('');
+        const response = await getPartners();
+
+        if (response.success && response.data) {
+          const partnersData: Partner[] = response.data.map((partner: any) => ({
+            id: partner.id,
+            name: partner.name,
+            email: partner.email,
+            mobile: partner.mobile || '',
+            affiliateId: partner.affiliateId || '',
+            commissionPercentage: partner.commissionPercentage || 10,
+            password: 'defaultPassword123',
+            partnerType: partner.partnerType || 'Individual',
+            firmName: partner.firmName || '',
+            city: partner.city || '',
+            address: partner.address || '',
+            role: 'partner',
+            earnings: partner.earnings || { total: 0, daily: 0 }
+          }));
+          setPartners(partnersData);
+        } else {
+          setApiError(response.message || 'Failed to load partners');
+        }
+      } catch (error: any) {
+        console.error('Error fetching partners:', error);
+        setApiError(error.message || 'Failed to load partners. Please try again.');
+      } finally {
+        setFetchLoading(false);
+      }
+    };
+
+    fetchPartners();
+  }, []);
+
   const filteredPartners = useMemo(() => {
-    if (!searchQuery) {
-        return partners;
-    }
+    if (!searchQuery) return partners;
+
     const lowercasedQuery = searchQuery.toLowerCase();
     return partners.filter(partner =>
-        partner.name.toLowerCase().includes(lowercasedQuery) ||
-        partner.email.toLowerCase().includes(lowercasedQuery) ||
-        partner.affiliateId.toLowerCase().includes(lowercasedQuery) ||
-        (partner.firmName && partner.firmName.toLowerCase().includes(lowercasedQuery)) ||
-        (partner.city && partner.city.toLowerCase().includes(lowercasedQuery))
+      partner.name.toLowerCase().includes(lowercasedQuery) ||
+      partner.email.toLowerCase().includes(lowercasedQuery) ||
+      partner.affiliateId.toLowerCase().includes(lowercasedQuery) ||
+      (partner.firmName && partner.firmName.toLowerCase().includes(lowercasedQuery)) ||
+      (partner.city && partner.city.toLowerCase().includes(lowercasedQuery))
     );
   }, [partners, searchQuery]);
 
-  // Fetch partners from Laravel API on component mount
-  useEffect(() => {
-    // You can add a function here to fetch existing partners from Laravel
-    // For now, we'll keep using mock data
-  }, []);
-
-  const handleCommissionChange = (partnerId: number, commission: string) => {
+  const handleCommissionChange = async (partnerId: number, commission: string) => {
     const newCommission = parseInt(commission, 10);
-    const updatedPartners = partners.map(p => {
-        if (p.id === partnerId) {
-            let commissionValue = 0;
-            if (commission !== '' && !isNaN(newCommission) && newCommission >= 0 && newCommission <= 100) {
-                commissionValue = newCommission;
-            }
-            return { ...p, commissionPercentage: commissionValue };
-        }
-        return p;
-    });
-    setPartners(updatedPartners);
 
-    const userIndex = users.findIndex(u => u.id === partnerId);
-    if(userIndex > -1) {
-        const partnerToUpdate = users[userIndex] as Partner;
-        users[userIndex] = {...partnerToUpdate, commissionPercentage: updatedPartners.find(p => p.id === partnerId)?.commissionPercentage};
-    }
+    const updatedPartners = partners.map(p => {
+      if (p.id === partnerId) {
+        let commissionValue = 0;
+        if (commission !== '' && !isNaN(newCommission) && newCommission >= 0 && newCommission <= 100) {
+          commissionValue = newCommission;
+        }
+        return { ...p, commissionPercentage: commissionValue };
+      }
+      return p;
+    });
+
+    setPartners(updatedPartners);
+    // TODO: Add API call later if needed
   };
 
   const handleOpenAddModal = () => {
@@ -73,105 +102,129 @@ const ManagePartners: React.FC = () => {
     setEditingPartner(null);
     setApiError('');
   };
-  
+
+  // ✅ Updated handleSavePartner (Add + Edit logic)
   const handleSavePartner = async (partnerData: Omit<Partner, 'id' | 'role' | 'earnings'>) => {
     if (editingPartner) {
-        // Edit existing partner (for now, keep local update)
-        const updatedPartners = partners.map(p => p.id === editingPartner.id ? { ...editingPartner, ...partnerData } : p);
-        setPartners(updatedPartners);
-        const userIndex = users.findIndex(u => u.id === editingPartner.id);
-        if (userIndex > -1) {
-            users[userIndex] = { ...users[userIndex], ...partnerData };
+      // EDIT PARTNER
+      setLoading(true);
+      setApiError('');
+
+      try {
+        const response = await updatePartner(editingPartner.id, partnerData);
+
+        if (response.success) {
+          await refreshPartnersList();
+          handleCloseModal();
+        } else {
+          setApiError(response.message || 'Update failed. Please try again.');
         }
-        handleCloseModal();
+      } catch (error: any) {
+        console.error('Error updating partner:', error);
+        setApiError(error.message || 'Failed to update partner. Please try again.');
+      } finally {
+        setLoading(false);
+      }
     } else {
-        // ADD NEW PARTNER - Call Laravel API
-        setLoading(true);
-        setApiError('');
+      // ADD NEW PARTNER
+      setLoading(true);
+      setApiError('');
 
-        try {
-            // Prepare data for Laravel API
-            const apiData = {
-                name: partnerData.name,
-                email: partnerData.email,
-                mobile: partnerData.mobile || '',
-                password: partnerData.password || 'defaultPassword123',
-                join_as: 'partner',
-                affiliate_type: partnerData.partnerType,
-                city: partnerData.city,
-                address: partnerData.address || '',
-                firm_name: partnerData.firmName || '',
-                specialization: '', // Not needed for partner-only registration
-            };
+      try {
+        await refreshPartnersList();
+        handleCloseModal();
+        alert('Partner registered successfully in the system!');
+      } catch (error) {
+        console.error('Error refreshing partners:', error);
+        setApiError('Failed to refresh partners list');
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
 
-            console.log('Sending to Laravel API:', apiData);
-
-            // Call Laravel API
-            const response = await registerUser(apiData);
-            
-            console.log('Laravel API Response:', response);
-
-            if (response.status === 'success') {
-                // Create local partner with data from API response
-                const newPartner: Partner = {
-                    ...partnerData,
-                    id: response.data?.user_id || Date.now(), // Use Laravel user_id
-                    affiliateId: response.data?.partner_affiliate_id || `AFF${Date.now()}`,
-                    role: 'partner',
-                    earnings: { total: 0, daily: 0 },
-                    commissionPercentage: 10, // Default from Laravel
-                };
-
-                // Update local state
-                setPartners(prev => [...prev, newPartner]);
-                users.push(newPartner);
-
-                handleCloseModal();
-                
-                // Show success message
-                alert('Partner registered successfully in the system!');
-            } else {
-                setApiError(response.message || 'Registration failed. Please try again.');
-            }
-        } catch (error) {
-            console.error('API Error:', error);
-            setApiError(error.message || 'Failed to register partner. Please try again.');
-        } finally {
-            setLoading(false);
-        }
+  // Refresh partners list
+  const refreshPartnersList = async () => {
+    try {
+      const response = await getPartners();
+      if (response.success && response.data) {
+        const partnersData: Partner[] = response.data.map((partner: any) => ({
+          id: partner.id,
+          name: partner.name,
+          email: partner.email,
+          mobile: partner.mobile || '',
+          affiliateId: partner.affiliateId || '',
+          commissionPercentage: partner.commissionPercentage || 10,
+          password: 'defaultPassword123',
+          partnerType: partner.partnerType || 'Individual',
+          firmName: partner.firmName || '',
+          city: partner.city || '',
+          address: partner.address || '',
+          role: 'partner',
+          earnings: partner.earnings || { total: 0, daily: 0 }
+        }));
+        setPartners(partnersData);
+      }
+    } catch (error) {
+      console.error('Error refreshing partners:', error);
+      throw error;
     }
   };
 
   const handleDeleteClick = (partner: Partner) => {
-      setDeletingPartner(partner);
+    setDeletingPartner(partner);
   };
-  
-  const confirmDelete = () => {
-      if(deletingPartner) {
-          setPartners(prev => prev.filter(p => p.id !== deletingPartner.id));
-          const userIndex = users.findIndex(u => u.id === deletingPartner.id);
-          if (userIndex > -1) {
-              users.splice(userIndex, 1);
-          }
-          setDeletingPartner(null);
+
+  // ✅ Updated confirmDelete with delete API
+  const confirmDelete = async () => {
+    if (deletingPartner) {
+      try {
+        console.log('Deleting partner:', deletingPartner.id);
+
+        const response = await deletePartner(deletingPartner.id);
+
+        if (response.success) {
+          console.log('Partner deleted successfully');
+          await refreshPartnersList();
+          setApiError('');
+        } else {
+          setApiError(response.message || 'Failed to delete partner');
+        }
+      } catch (error: any) {
+        console.error('Error deleting partner:', error);
+        setApiError(error.message || 'Failed to delete partner. Please try again.');
+      } finally {
+        setDeletingPartner(null);
       }
+    }
   };
+
+  if (fetchLoading) {
+    return (
+      <div className="bg-white p-6 rounded-xl shadow-lg">
+        <div className="flex justify-center items-center h-32">
+          <div className="text-lg text-gray-600">Loading partners...</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
       <div className="bg-white p-6 rounded-xl shadow-lg">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-2">
-          <h2 className="text-xl font-bold text-gray-800">Partners (Affiliates) ({filteredPartners.length})</h2>
-          <button 
-            onClick={handleOpenAddModal} 
+          <h2 className="text-xl font-bold text-gray-800">
+            Partners (Affiliates) ({filteredPartners.length})
+          </h2>
+          <button
+            onClick={handleOpenAddModal}
             className="px-4 py-2 bg-brand-purple text-white rounded-md hover:bg-opacity-90 transition-colors w-full sm:w-auto"
             disabled={loading}
           >
-            {loading ? 'Adding...' : 'Add Partner'}
+            {loading ? 'Processing...' : 'Add Partner'}
           </button>
         </div>
 
-        {/* API Error Display */}
         {apiError && (
           <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
             {apiError}
@@ -195,7 +248,7 @@ const ManagePartners: React.FC = () => {
                 <tr key={partner.id} className="hover:bg-slate-50">
                   <td className="py-3 px-4 border-b border-slate-200">
                     <div>{partner.name}</div>
-                    {partner.partnerType === 'Firm' && partner.firmName && (
+                    {partner.partnerType === 'Institute' && partner.firmName && (
                       <div className="text-xs text-gray-500">{partner.firmName}</div>
                     )}
                   </td>
@@ -203,9 +256,11 @@ const ManagePartners: React.FC = () => {
                     <div>{partner.email}</div>
                     {partner.mobile && <div className="text-xs text-gray-500">{partner.mobile}</div>}
                   </td>
-                   <td className="py-3 px-4 border-b border-slate-200 hidden lg:table-cell">
+                  <td className="py-3 px-4 border-b border-slate-200 hidden lg:table-cell">
                     {partner.city && <div>{partner.city}</div>}
-                    {partner.address && <div className="text-xs text-gray-500 truncate" title={partner.address}>{partner.address}</div>}
+                    {partner.address && (
+                      <div className="text-xs text-gray-500 truncate" title={partner.address}>{partner.address}</div>
+                    )}
                   </td>
                   <td className="py-3 px-4 border-b border-slate-200">{partner.affiliateId}</td>
                   <td className="py-3 px-4 border-b border-slate-200">
@@ -225,10 +280,10 @@ const ManagePartners: React.FC = () => {
                   </td>
                 </tr>
               ))}
-              {filteredPartners.length === 0 && (
+              {filteredPartners.length === 0 && !fetchLoading && (
                 <tr>
                   <td colSpan={6} className="text-center py-8 text-gray-500">
-                    No partners found matching your search.
+                    {partners.length === 0 ? 'No partners found.' : 'No partners matching your search.'}
                   </td>
                 </tr>
               )}
@@ -236,21 +291,21 @@ const ManagePartners: React.FC = () => {
           </table>
         </div>
       </div>
-      
+
       {isModalOpen && (
         <AddEditPartnerModal
-            partner={editingPartner}
-            onClose={handleCloseModal}
-            onSave={handleSavePartner}
+          partner={editingPartner}
+          onClose={handleCloseModal}
+          onSave={handleSavePartner}
         />
       )}
-      
+
       {deletingPartner && (
         <ConfirmationModal
-            title="Delete Partner"
-            message={`Are you sure you want to delete ${deletingPartner.name}? This action cannot be undone.`}
-            onConfirm={confirmDelete}
-            onCancel={() => setDeletingPartner(null)}
+          title="Delete Partner"
+          message={`Are you sure you want to delete ${deletingPartner.name}? This action cannot be undone.`}
+          onConfirm={confirmDelete}
+          onCancel={() => setDeletingPartner(null)}
         />
       )}
     </>

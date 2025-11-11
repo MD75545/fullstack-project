@@ -1,11 +1,10 @@
-
-
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { courses, testimonials } from '../data/mockData';
+import { testimonials } from '../data/mockData';
 import PartnerModal from '../components/PartnerModal';
 import BookDemoModal from '../components/BookDemoModal';
 import { useAuth } from '../context/AuthContext';
+import { getCourses } from '../services/api';
 import type { Course, Teacher, Partner } from '../types';
 
 // Icons for the "What We Do" section
@@ -57,9 +56,67 @@ const Home: React.FC = () => {
     const { user } = useAuth();
     const [copiedCourseId, setCopiedCourseId] = useState<number | null>(null);
     const [canShare, setCanShare] = useState(false);
-
+    const [courses, setCourses] = useState<Course[]>([]);
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
+        // Fetch courses from API
+        const fetchCourses = async () => {
+            try {
+                setLoading(true);
+                const result = await getCourses();
+                console.log('Courses API response:', result); // Debug log
+                
+                if (result.status === 'success') {
+                    // Transform API data to match Course type
+                    const transformedCourses = result.data.map((course: any) => {
+                        console.log('Course data:', course); // Debug log for each course
+                        
+                        // Handle image URL - make sure it's absolute
+                        let imageUrl = '/default-course-image.jpg';
+                        if (course.image_url) {
+                            // If it's already a full URL, use it directly
+                            if (course.image_url.startsWith('http')) {
+                                imageUrl = course.image_url;
+                            } 
+                            // If it's a storage path, prepend the base URL
+                            else if (course.image_url.startsWith('storage/') || course.image_url.startsWith('courses/')) {
+                                imageUrl = `http://localhost:8000/${course.image_url.replace('storage/', 'storage/')}`;
+                            }
+                            // If it's already a relative path from storage, construct full URL
+                            else if (course.image_url.includes('courses/')) {
+                                imageUrl = `http://localhost:8000/storage/${course.image_url}`;
+                            }
+                        }
+
+                        return {
+                            id: course.course_id,
+                            title: course.title,
+                            description: course.description,
+                            duration: course.duration,
+                            level: course.level,
+                            image: imageUrl,
+                            price: course.price,
+                            icon: (
+                                <div className="w-10 h-10 bg-brand-purple rounded-full flex items-center justify-center text-white">
+                                    {course.title.charAt(0)}
+                                </div>
+                            )
+                        };
+                    });
+                    setCourses(transformedCourses);
+                } else {
+                    console.error('Failed to fetch courses:', result.message);
+                }
+            } catch (error) {
+                console.error('Failed to fetch courses:', error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchCourses();
+
         if (navigator.share) {
             setCanShare(true);
         }
@@ -170,6 +227,14 @@ const Home: React.FC = () => {
         }
     ];
 
+    // Default course images for fallback
+    const defaultCourseImages = [
+        'https://picsum.photos/400/300?random=course1',
+        'https://picsum.photos/400/300?random=course2',
+        'https://picsum.photos/400/300?random=course3',
+        'https://picsum.photos/400/300?random=course4',
+    ];
+
     return (
         <>
             <div className="bg-white">
@@ -204,66 +269,112 @@ const Home: React.FC = () => {
                                 Dive into our comprehensive courses designed by industry experts.
                             </p>
                         </div>
-                        <div className="mt-12 grid gap-8 md:grid-cols-2 lg:grid-cols-4">
-                            {courses.map((course) => (
-                                <div key={course.id} className="bg-white rounded-lg shadow-lg overflow-hidden flex flex-col transform hover:-translate-y-2 transition-transform duration-300">
-                                    <img className="h-48 w-full object-cover" src={course.image} alt={course.title} />
-                                    <div className="p-6 flex flex-col flex-grow">
-                                        <div className="flex items-center space-x-4 mb-4">
-                                            <div className="flex-shrink-0">{course.icon}</div>
-                                            <h3 className="text-lg font-bold text-brand-navy">{course.title}</h3>
-                                        </div>
-                                        <p className="text-gray-600 flex-grow text-sm">{course.description.substring(0, 100)}...</p>
-                                        <div className="mt-6">
-                                            <button onClick={() => openDemoModal(course)} className="w-full text-sm bg-brand-purple text-white py-2 px-4 rounded-md hover:bg-opacity-90 transition duration-300">
-                                                Book a Free Demo
-                                            </button>
-                                            {canBeAffiliate && affiliateId && (() => {
-                                                const affiliateLink = `${window.location.origin}${window.location.pathname}#/courses?courseId=${course.id}&ref=${affiliateId}`;
-                                                return (
-                                                    <div className="mt-4 border-t border-gray-200 pt-4">
-                                                        <label className="block text-xs font-semibold text-gray-600 mb-1">Your Affiliate Link</label>
-                                                        <div className="bg-gray-100 p-1.5 rounded-md flex items-center justify-between text-sm">
-                                                            <input
-                                                                type="text"
-                                                                readOnly
-                                                                value={affiliateLink}
-                                                                className="bg-transparent text-gray-700 w-full outline-none text-xs flex-1 px-2"
-                                                                aria-label="Affiliate Link"
-                                                            />
-                                                            <div className="flex items-center ml-2 space-x-1 flex-shrink-0">
-                                                                <button
-                                                                    onClick={() => copyToClipboard(affiliateLink, course.id)}
-                                                                    className="px-2 py-1.5 bg-brand-purple text-white rounded-md hover:bg-opacity-90 transition-colors w-20 text-xs flex items-center justify-center gap-1"
-                                                                    aria-label="Copy link"
-                                                                >
-                                                                    {copiedCourseId === course.id ? 'Copied!' : <><CopyIcon /> Copy</>}
-                                                                </button>
-                                                                {canShare && (
-                                                                    <button
-                                                                        onClick={() => handleShare(course, affiliateLink)}
-                                                                        title="Share link"
-                                                                        className="p-1.5 bg-brand-navy text-white rounded-md hover:bg-opacity-90 transition-colors"
-                                                                        aria-label="Share link"
-                                                                    >
-                                                                        <ShareIcon />
-                                                                    </button>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })()}
-                                        </div>
-                                    </div>
+                        
+                        {loading ? (
+                            <div className="mt-12 flex justify-center items-center h-64">
+                                <div className="text-center">
+                                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-purple mx-auto"></div>
+                                    <p className="mt-4 text-gray-600">Loading courses...</p>
                                 </div>
-                            ))}
-                        </div>
-                         <div className="mt-10 text-center">
-                            <Link to="/courses" className="text-brand-purple font-semibold hover:underline">
-                                View All Courses &rarr;
-                            </Link>
-                        </div>
+                            </div>
+                        ) : courses.length === 0 ? (
+                            <div className="mt-12 text-center">
+                                <p className="text-gray-500">No courses available at the moment.</p>
+                            </div>
+                        ) : (
+                            <>
+                                <div className="mt-12 grid gap-8 md:grid-cols-2 lg:grid-cols-4">
+                                    {courses.map((course, index) => (
+                                        <div key={course.id} className="bg-white rounded-lg shadow-lg overflow-hidden flex flex-col transform hover:-translate-y-2 transition-transform duration-300">
+                                            <div className="h-48 w-full bg-gray-200 flex items-center justify-center overflow-hidden">
+                                                <img 
+                                                    className="h-full w-full object-cover"
+                                                    src={course.image} 
+                                                    alt={course.title}
+                                                    onError={(e) => {
+                                                        // Use a default image from picsum with different random images
+                                                        const randomIndex = index % defaultCourseImages.length;
+                                                        (e.target as HTMLImageElement).src = defaultCourseImages[randomIndex];
+                                                    }}
+                                                />
+                                            </div>
+                                            <div className="p-6 flex flex-col flex-grow">
+                                                <div className="flex items-center space-x-4 mb-4">
+                                                    <div className="flex-shrink-0">
+                                                        {course.icon}
+                                                    </div>
+                                                    <h3 className="text-lg font-bold text-brand-navy">{course.title}</h3>
+                                                </div>
+                                                <p className="text-gray-600 flex-grow text-sm">
+                                                    {course.description && course.description.length > 100 
+                                                        ? `${course.description.substring(0, 100)}...`
+                                                        : course.description || 'No description available.'
+                                                    }
+                                                </p>
+                                                <div className="mt-4">
+                                                    <div className="flex justify-between items-center text-sm text-gray-500">
+                                                        <span>Duration: {course.duration}</span>
+                                                        <span>Level: {course.level}</span>
+                                                    </div>
+                                                    <div className="mt-2 text-sm font-semibold text-brand-purple">
+                                                        Price: ₹{course.price ? course.price.toLocaleString('en-IN') : 'N/A'}
+                                                    </div>
+                                                </div>
+                                                <div className="mt-6">
+                                                    <button 
+                                                        onClick={() => openDemoModal(course)} 
+                                                        className="w-full text-sm bg-brand-purple text-white py-2 px-4 rounded-md hover:bg-opacity-90 transition duration-300"
+                                                    >
+                                                        Book a Free Demo
+                                                    </button>
+                                                    {canBeAffiliate && affiliateId && (() => {
+                                                        const affiliateLink = `${window.location.origin}${window.location.pathname}#/courses?courseId=${course.id}&ref=${affiliateId}`;
+                                                        return (
+                                                            <div className="mt-4 border-t border-gray-200 pt-4">
+                                                                <label className="block text-xs font-semibold text-gray-600 mb-1">Your Affiliate Link</label>
+                                                                <div className="bg-gray-100 p-1.5 rounded-md flex items-center justify-between text-sm">
+                                                                    <input
+                                                                        type="text"
+                                                                        readOnly
+                                                                        value={affiliateLink}
+                                                                        className="bg-transparent text-gray-700 w-full outline-none text-xs flex-1 px-2"
+                                                                        aria-label="Affiliate Link"
+                                                                    />
+                                                                    <div className="flex items-center ml-2 space-x-1 flex-shrink-0">
+                                                                        <button
+                                                                            onClick={() => copyToClipboard(affiliateLink, course.id)}
+                                                                            className="px-2 py-1.5 bg-brand-purple text-white rounded-md hover:bg-opacity-90 transition-colors w-20 text-xs flex items-center justify-center gap-1"
+                                                                            aria-label="Copy link"
+                                                                        >
+                                                                            {copiedCourseId === course.id ? 'Copied!' : <><CopyIcon /> Copy</>}
+                                                                        </button>
+                                                                        {canShare && (
+                                                                            <button
+                                                                                onClick={() => handleShare(course, affiliateLink)}
+                                                                                title="Share link"
+                                                                                className="p-1.5 bg-brand-navy text-white rounded-md hover:bg-opacity-90 transition-colors"
+                                                                                aria-label="Share link"
+                                                                            >
+                                                                                <ShareIcon />
+                                                                            </button>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })()}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="mt-10 text-center">
+                                    <Link to="/courses" className="text-brand-purple font-semibold hover:underline">
+                                        View All Courses &rarr;
+                                    </Link>
+                                </div>
+                            </>
+                        )}
                     </div>
                 </div>
                 
@@ -392,7 +503,13 @@ const Home: React.FC = () => {
                 </div>
             </div>
 
-            {selectedCourseForDemo && <BookDemoModal course={selectedCourseForDemo} onClose={() => setSelectedCourseForDemo(null)} affiliateId={null} />}
+            {selectedCourseForDemo && (
+                <BookDemoModal 
+                    course={selectedCourseForDemo} 
+                    onClose={() => setSelectedCourseForDemo(null)} 
+                    affiliateId={affiliateId || null} 
+                />
+            )}
             {isPartnerModalOpen && <PartnerModal onClose={() => setIsPartnerModalOpen(false)} />}
         </>
     );

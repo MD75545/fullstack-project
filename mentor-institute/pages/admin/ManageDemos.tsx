@@ -1,10 +1,19 @@
-import React, { useState, useMemo } from 'react';
-import { demoBookings, users, courses } from '../../data/mockData';
-import type { DemoBooking, Partner, Teacher, Student } from '../../types';
+import React, { useState, useEffect, useMemo } from 'react';
+import type { DemoBooking, Partner, Teacher, Student, Course } from '../../types';
 import PaymentModal from '../../components/PaymentModal';
 import { useSearch } from '../../context/SearchContext';
+import { 
+    getDemoBookings, 
+    updateDemoBooking, 
+    scheduleDemo, 
+    calculateCommission, 
+    processPayment, 
+    getCourses,
+    getTeachers 
+} from '../../services/api';
+import { useNotifications } from '../../context/NotificationsContext';
 
-// Schedule Modal Component (defined in-file to avoid creating new files)
+// Schedule Modal Component
 const ScheduleDemoModal: React.FC<{
     booking: DemoBooking;
     onClose: () => void;
@@ -16,7 +25,69 @@ const ScheduleDemoModal: React.FC<{
         teacherId: booking.teacherId,
     });
     
-    const teachers = users.filter(u => u.role === 'teacher') as Teacher[];
+    const [teachers, setTeachers] = useState<Teacher[]>([]);
+    const [teachersLoading, setTeachersLoading] = useState(true);
+    const [teachersError, setTeachersError] = useState<string | null>(null);
+
+    // Fetch teachers from API
+    useEffect(() => {
+        const fetchTeachers = async () => {
+            try {
+                setTeachersLoading(true);
+                setTeachersError(null);
+                const result = await getTeachers();
+                console.log('Teachers API result:', result); 
+                
+                if (result.success === true || result.status === 'success') {
+                    const teachersData = result.data || result.teachers || [];
+                    console.log('Raw teachers data:', teachersData);
+                    
+                    if (teachersData.length > 0) {
+                        // Transform API data - teachers are users with role 'teacher'
+                        const transformedTeachers = teachersData
+                            .filter((user: any) => user.role === 'teacher') // Filter only teachers
+                            .map((user: any) => {
+                                console.log('Teacher user data:', user);
+                                
+                                return {
+                                    id: user.user_id || user.id, // This should be the user_id
+                                    name: user.name || 'Unknown Teacher',
+                                    email: user.email || '',
+                                    mobile: user.mobile || '',
+                                    role: 'teacher' as const,
+                                    specialization: user.specialization || 'General',
+                                    qualification: user.qualification || '',
+                                    experience: user.experience || '',
+                                    bio: user.bio || '',
+                                    avatar: user.photo_url || user.avatar || '',
+                                    affiliateId: user.affiliate_id || '',
+                                    commissionPercentage: user.commission_percentage || 0,
+                                    displayName: user.display_name || user.name
+                                };
+                            });
+                        
+                        console.log('Transformed teachers:', transformedTeachers);
+                        setTeachers(transformedTeachers);
+                        
+                        if (transformedTeachers.length === 0) {
+                            setTeachersError('No teachers found (users with teacher role)');
+                        }
+                    } else {
+                        setTeachersError('No users with teacher role found');
+                    }
+                } else {
+                    setTeachersError(result.message || 'Failed to fetch teachers');
+                }
+            } catch (error: any) {
+                console.error('Failed to fetch teachers:', error);
+                setTeachersError(error.message || 'Failed to fetch teachers');
+            } finally {
+                setTeachersLoading(false);
+            }
+        };
+
+        fetchTeachers();
+    }, []);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
@@ -24,10 +95,11 @@ const ScheduleDemoModal: React.FC<{
     }
 
     const handleSubmit = () => {
+        console.log('Submitting schedule data:', scheduleData);
         onSave(booking.id, {
             date: scheduleData.date,
             time: scheduleData.time,
-            teacherId: Number(scheduleData.teacherId) || undefined
+            teacherId: scheduleData.teacherId ? parseInt(scheduleData.teacherId as string) : undefined
         });
     }
 
@@ -38,41 +110,220 @@ const ScheduleDemoModal: React.FC<{
                 <div className="space-y-4">
                      <div>
                         <label htmlFor="date" className="block text-sm font-medium text-gray-700">Demo Date</label>
-                        <input type="date" name="date" id="date" value={scheduleData.date} onChange={handleChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
+                        <input 
+                            type="date" 
+                            name="date" 
+                            id="date" 
+                            value={scheduleData.date} 
+                            onChange={handleChange} 
+                            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-purple focus:border-transparent" 
+                            min={new Date().toISOString().split('T')[0]}
+                        />
                     </div>
                      <div>
                         <label htmlFor="time" className="block text-sm font-medium text-gray-700">Demo Time</label>
-                        <input type="time" name="time" id="time" value={scheduleData.time} onChange={handleChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
+                        <input 
+                            type="time" 
+                            name="time" 
+                            id="time" 
+                            value={scheduleData.time} 
+                            onChange={handleChange} 
+                            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-purple focus:border-transparent" 
+                        />
                     </div>
                      <div>
                         <label htmlFor="teacherId" className="block text-sm font-medium text-gray-700">Assign Teacher</label>
-                        <select name="teacherId" id="teacherId" value={scheduleData.teacherId || ''} onChange={handleChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md">
-                            <option value="">Select a teacher...</option>
-                            {teachers.map(t => <option key={t.id} value={t.id}>{t.name} ({t.specialization})</option>)}
-                        </select>
+                        {teachersLoading ? (
+                            <div className="mt-1 flex items-center space-x-2">
+                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-brand-purple"></div>
+                                <span className="text-sm text-gray-500">Loading teachers...</span>
+                            </div>
+                        ) : teachersError ? (
+                            <div className="mt-1 p-2 bg-red-50 border border-red-200 rounded-md">
+                                <p className="text-sm text-red-600">{teachersError}</p>
+                            </div>
+                        ) : teachers.length === 0 ? (
+                            <p className="mt-1 text-sm text-red-500">No teachers available. Please add teachers first.</p>
+                        ) : (
+                            <select 
+                                name="teacherId" 
+                                id="teacherId" 
+                                value={scheduleData.teacherId || ''} 
+                                onChange={handleChange} 
+                                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-purple focus:border-transparent"
+                            >
+                                <option value="">Select a teacher...</option>
+                                {teachers.map(teacher => (
+                                    <option key={teacher.id} value={teacher.id}>
+                                        {teacher.name} 
+                                        {teacher.specialization && teacher.specialization !== 'General' && ` (${teacher.specialization})`}
+                                        {teacher.experience && ` - ${teacher.experience}`}
+                                    </option>
+                                ))}
+                            </select>
+                        )}
                     </div>
                 </div>
                  <div className="mt-6 flex justify-end gap-4">
-                    <button onClick={onClose} className="px-4 py-2 bg-gray-200 rounded-md">Cancel</button>
-                    <button onClick={handleSubmit} className="px-4 py-2 bg-brand-purple text-white rounded-md">Confirm & Schedule</button>
+                    <button 
+                        onClick={onClose} 
+                        className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors"
+                    >
+                        Cancel
+                    </button>
+                    <button 
+                        onClick={handleSubmit} 
+                        disabled={!scheduleData.date || !scheduleData.time || teachersLoading}
+                        className="px-4 py-2 bg-brand-purple text-white rounded-md hover:bg-opacity-90 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+                    >
+                        Confirm & Schedule
+                    </button>
                 </div>
             </div>
         </div>
     );
 };
 
-
 const ManageDemos: React.FC = () => {
-    const [bookings, setBookings] = useState<DemoBooking[]>(demoBookings);
+    const [bookings, setBookings] = useState<DemoBooking[]>([]);
+    const [courses, setCourses] = useState<Course[]>([]);
+    const [teachers, setTeachers] = useState<Teacher[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [coursesLoading, setCoursesLoading] = useState(true);
+    const [teachersLoading, setTeachersLoading] = useState(true);
     const [paymentModalState, setPaymentModalState] = useState<{ isOpen: boolean; booking: DemoBooking | null }>({ isOpen: false, booking: null });
     const [scheduleModalState, setScheduleModalState] = useState<{ isOpen: boolean; booking: DemoBooking | null }>({ isOpen: false, booking: null });
     const { searchQuery } = useSearch();
+    const { addNotification } = useNotifications();
     
-    const allStatuses: DemoBooking['status'][] = ['Scheduled', 'Conducted', 'Postponed', 'Cancelled', 'Student Admitted'];
+    const allStatuses: DemoBooking['status'][] = ['Pending', 'Scheduled', 'Conducted', 'Postponed', 'Cancelled', 'Student Admitted'];
 
-    const getCourseName = (courseId: number) => courses.find(c => c.id === courseId)?.title || 'Unknown';
-    const getTeacherName = (teacherId?: number) => users.find(u => u.id === teacherId)?.name || 'N/A';
+    // Fetch teachers from API for the main component
+    useEffect(() => {
+        const fetchTeachers = async () => {
+            try {
+                setTeachersLoading(true);
+                const result = await getTeachers();
+                console.log('Main component teachers result:', result);
+                
+                if (result.success === true || result.status === 'success') {
+                    const teachersData = result.data || result.teachers || [];
+                    if (teachersData.length > 0) {
+                        const transformedTeachers = teachersData
+                            .filter((user: any) => user.role === 'teacher')
+                            .map((user: any) => ({
+                                id: user.user_id || user.id,
+                                name: user.name || 'Unknown Teacher',
+                                email: user.email || '',
+                                mobile: user.mobile || '',
+                                role: 'teacher' as const,
+                                specialization: user.specialization || 'General',
+                                qualification: user.qualification || '',
+                                experience: user.experience || '',
+                                bio: user.bio || '',
+                                avatar: user.photo_url || user.avatar || '',
+                                affiliateId: user.affiliate_id || '',
+                                commissionPercentage: user.commission_percentage || 0,
+                                displayName: user.display_name || user.name
+                            }));
+                        setTeachers(transformedTeachers);
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to fetch teachers in main component:', error);
+            } finally {
+                setTeachersLoading(false);
+            }
+        };
+
+        fetchTeachers();
+    }, []);
+
+    // Fetch courses from API
+    useEffect(() => {
+        const fetchCourses = async () => {
+            try {
+                setCoursesLoading(true);
+                const result = await getCourses();
+                if (result.status === 'success') {
+                    const transformedCourses = result.data.map((course: any) => ({
+                        id: course.course_id,
+                        title: course.title,
+                        description: course.description,
+                        duration: course.duration,
+                        level: course.level,
+                        image: course.image_url || '/default-course-image.jpg',
+                        price: course.price,
+                        icon: (
+                            <div className="w-10 h-10 bg-brand-purple rounded-full flex items-center justify-center text-white">
+                                {course.title.charAt(0)}
+                            </div>
+                        )
+                    }));
+                    setCourses(transformedCourses);
+                } else {
+                    console.error('Failed to fetch courses:', result.message);
+                }
+            } catch (error) {
+                console.error('Failed to fetch courses:', error);
+            } finally {
+                setCoursesLoading(false);
+            }
+        };
+
+        fetchCourses();
+    }, []);
+
+    const getCourseName = (courseId: number) => {
+        const course = courses.find(c => c.id === courseId);
+        return course ? course.title : 'Unknown';
+    };
+
+    const getTeacherName = (teacherId?: number) => {
+        if (!teacherId) return 'N/A';
+        const teacher = teachers.find(t => t.id === teacherId);
+        return teacher ? teacher.name : 'Unknown Teacher';
+    };
     
+    // Fetch demo bookings on component mount
+    useEffect(() => {
+        fetchDemoBookings();
+    }, []);
+
+    const fetchDemoBookings = async () => {
+        try {
+            setLoading(true);
+            const result = await getDemoBookings();
+            if (result.status === 'success') {
+                const transformedBookings = result.data.map((booking: any) => ({
+                    id: booking.id,
+                    studentName: booking.student_name,
+                    studentEmail: booking.student_email,
+                    studentMobile: booking.student_mobile,
+                    courseId: booking.course_id,
+                    referredByAffiliateId: booking.referredByAffiliateId,
+                    bookingDate: booking.bookingDate,
+                    bookingTime: booking.bookingTime,
+                    status: booking.status,
+                    scheduledDate: booking.scheduledDate,
+                    scheduledTime: booking.scheduledTime,
+                    teacherId: booking.teacher_id,
+                    commissionAmount: booking.commissionAmount,
+                    commissionPaid: booking.commissionPaid,
+                    paymentDetailsId: booking.payment_details_id
+                }));
+                setBookings(transformedBookings);
+            } else {
+                addNotification('error', 'Failed to load demo bookings');
+            }
+        } catch (error) {
+            console.error('Failed to fetch demo bookings:', error);
+            addNotification('error', 'Failed to load demo bookings');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const filteredBookings = useMemo(() => {
         if (!searchQuery) {
             return bookings;
@@ -83,69 +334,137 @@ const ManageDemos: React.FC = () => {
             getCourseName(b.courseId).toLowerCase().includes(lowercasedQuery) ||
             (b.referredByAffiliateId && b.referredByAffiliateId.toLowerCase().includes(lowercasedQuery))
         );
-    }, [bookings, searchQuery]);
+    }, [bookings, searchQuery, courses]);
 
-    const handleStatusChange = (bookingId: number, newStatus: DemoBooking['status']) => {
-        const bookingIndex = demoBookings.findIndex(b => b.id === bookingId);
-        if (bookingIndex > -1) {
-            const booking = demoBookings[bookingIndex];
-            booking.status = newStatus;
+    const handleStatusChange = async (bookingId: number, newStatus: DemoBooking['status']) => {
+        try {
+            const result = await updateDemoBooking(bookingId, { status: newStatus });
+            if (result.status === 'success') {
+                setBookings(prev => prev.map(booking => 
+                    booking.id === bookingId ? { ...booking, status: newStatus } : booking
+                ));
 
-            if (newStatus === 'Student Admitted') {
-                const studentExists = users.some(u => u.email === booking.studentEmail && u.role === 'student');
+                addNotification('success', `Status updated to ${newStatus}`);
 
-                if (!studentExists) {
-                    const newStudent: Student = {
-                        id: Date.now(),
-                        name: booking.studentName,
-                        email: booking.studentEmail,
-                        mobile: booking.studentMobile,
-                        password: 'password', 
-                        role: 'student',
-                        courseId: booking.courseId,
-                        teacherId: booking.teacherId, 
-                        referredBy: booking.referredByAffiliateId,
-                        displayName: 'real_name',
-                    };
-                    users.push(newStudent);
+                if (newStatus === 'Student Admitted') {
+                    const booking = bookings.find(b => b.id === bookingId);
+                    if (booking && booking.referredByAffiliateId) {
+                        try {
+                            const commissionResult = await calculateCommission(bookingId);
+                            if (commissionResult.status === 'success') {
+                                const commissionAmount = commissionResult.commission_amount || commissionResult.data?.commission_amount;
+                                setBookings(prev => prev.map(b => 
+                                    b.id === bookingId ? { 
+                                        ...b, 
+                                        commissionAmount: commissionAmount
+                                    } : b
+                                ));
+                                
+                                if (commissionAmount > 0) {
+                                    addNotification('success', `Commission calculated: ₹${commissionAmount}`);
+                                } else {
+                                    addNotification('info', commissionResult.message || 'No commission applicable');
+                                }
+                            } else {
+                                addNotification('warning', commissionResult.message || 'Commission calculation failed');
+                            }
+                        } catch (error) {
+                            console.error('Failed to calculate commission:', error);
+                            addNotification('error', 'Failed to calculate commission');
+                        }
+                    } else if (booking && !booking.referredByAffiliateId) {
+                        addNotification('info', 'No affiliate referral - no commission applicable');
+                    }
                 }
+            } else {
+                addNotification('error', result.message || 'Failed to update status');
             }
+        } catch (error: any) {
+            console.error('Failed to update status:', error);
+            addNotification('error', error.message || 'Failed to update status');
+        }
+    };
 
-            if (newStatus === 'Student Admitted' && booking.referredByAffiliateId) {
-                const affiliate = users.find(u => 'affiliateId' in u && u.affiliateId === booking.referredByAffiliateId) as Partner | Teacher | undefined;
-                const course = courses.find(c => c.id === booking.courseId);
-                if (affiliate && 'commissionPercentage' in affiliate && affiliate.commissionPercentage && course) {
-                    booking.commissionAmount = course.price * (affiliate.commissionPercentage / 100);
-                }
+    const handleConfirmPayment = async (bookingId: number, paymentData: { mode: string; description?: string; paidOn: string; paidAmount: number }) => {
+        try {
+            const result = await processPayment(bookingId, paymentData);
+            if (result.status === 'success') {
+                setBookings(prev => prev.map(booking => 
+                    booking.id === bookingId ? { 
+                        ...booking, 
+                        commissionPaid: true,
+                        paymentDetails: paymentData
+                    } : booking
+                ));
+                addNotification('success', 'Payment processed successfully');
+            } else {
+                addNotification('error', result.message || 'Failed to process payment');
             }
-            setBookings([...demoBookings]);
+            setPaymentModalState({ isOpen: false, booking: null });
+        } catch (error: any) {
+            console.error('Failed to process payment:', error);
+            addNotification('error', error.message || 'Failed to process payment');
+            setPaymentModalState({ isOpen: false, booking: null });
         }
     };
 
-    const handleConfirmPayment = (bookingId: number, paymentData: { mode: string; description?: string; paidOn: string; paidAmount: number }) => {
-        const bookingIndex = demoBookings.findIndex(b => b.id === bookingId);
-        if (bookingIndex > -1) {
-            demoBookings[bookingIndex] = { ...demoBookings[bookingIndex], commissionPaid: true, paymentDetails: paymentData };
-            setBookings([...demoBookings]);
-        }
-        setPaymentModalState({ isOpen: false, booking: null });
-    };
+    const handleScheduleSave = async (bookingId: number, scheduleData: { date: string, time: string, teacherId?: number }) => {
+  try {
+    console.log('Scheduling demo with data:', {
+      bookingId,
+      scheduleData,
+      teacherId: scheduleData.teacherId,
+    });
 
-    const handleScheduleSave = (bookingId: number, scheduleData: { date: string, time: string, teacherId?: number }) => {
-        const bookingIndex = demoBookings.findIndex(b => b.id === bookingId);
-        if (bookingIndex > -1) {
-            demoBookings[bookingIndex] = {
-                ...demoBookings[bookingIndex],
-                status: 'Scheduled',
-                scheduledDate: scheduleData.date,
-                scheduledTime: scheduleData.time,
-                teacherId: scheduleData.teacherId,
-                studentNotified: false, 
-            };
-            setBookings([...demoBookings]);
-        }
-        setScheduleModalState({ isOpen: false, booking: null });
-    };
+    const result = await scheduleDemo(bookingId, scheduleData);
+    
+    // ADD THESE DEBUG LINES HERE:
+    console.log('=== DEBUG: Schedule API Response ===');
+    console.log('FULL Schedule API response:', result);
+    console.log('Response data:', result.data);
+    console.log('Teacher ID in response:', result.data?.teacher_id);
+    console.log('All keys in response data:', result.data ? Object.keys(result.data) : 'No data');
+    console.log('=== END DEBUG ===');
+    
+    if (result.status === 'success') {
+      // Use the data returned from the API to update local state
+      const updatedBooking = result.data;
+      
+      setBookings(prev => prev.map(booking => 
+        booking.id === bookingId ? { 
+          ...booking, 
+          status: 'Scheduled',
+          scheduledDate: scheduleData.date,
+          scheduledTime: scheduleData.time,
+          teacherId: updatedBooking.teacher_id || scheduleData.teacherId
+        } : booking
+      ));
+      
+      console.log('Updated booking with teacher_id:', updatedBooking.teacher_id);
+      addNotification('success', 'Demo scheduled successfully');
+      setScheduleModalState({ isOpen: false, booking: null });
+    } else {
+      console.error('Schedule API error:', result);
+      addNotification('error', result.message || 'Failed to schedule demo');
+    }
+  } catch (error: any) {
+    console.error('Failed to schedule demo:', error);
+    addNotification('error', error.message || 'Failed to schedule demo');
+  }
+};
+
+    if (loading || coursesLoading) {
+        return (
+            <div className="bg-white p-6 rounded-xl shadow-lg">
+                <div className="flex justify-center items-center h-64">
+                    <div className="text-center">
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-purple mx-auto"></div>
+                        <p className="mt-4 text-gray-600">Loading demo bookings...</p>
+                    </div>
+                </div>
+            </div>
+        );
+    }
     
     return (
         <>
@@ -171,6 +490,9 @@ const ManageDemos: React.FC = () => {
                                     <td className="py-3 px-4 border-b border-slate-200">
                                         <div className="font-semibold">{booking.studentName}</div>
                                         <div className="text-xs text-gray-500">{getCourseName(booking.courseId)}</div>
+                                        {booking.teacherId && (
+                                            <div className="text-xs text-blue-500">Teacher ID: {booking.teacherId}</div>
+                                        )}
                                     </td>
                                     <td className="py-3 px-4 border-b border-slate-200">
                                         {booking.referredByAffiliateId ? (
@@ -188,6 +510,9 @@ const ManageDemos: React.FC = () => {
                                             <div>
                                                 <div>{new Date(booking.scheduledDate).toLocaleDateString()} at {booking.scheduledTime}</div>
                                                 <div className="text-xs text-gray-500">with {getTeacherName(booking.teacherId)}</div>
+                                                {booking.teacherId && (
+                                                    <div className="text-xs text-green-500">Teacher Assigned</div>
+                                                )}
                                             </div>
                                         )}
                                     </td>
@@ -215,8 +540,8 @@ const ManageDemos: React.FC = () => {
                                     </td>
                                     <td className="py-3 px-4 border-b border-slate-200 text-xs">
                                         {booking.status === 'Student Admitted' && booking.commissionAmount ? (
-                                            booking.commissionPaid && booking.paymentDetails ? (
-                                                <div title={`Paid on ${booking.paymentDetails.paidOn}`}>
+                                            booking.commissionPaid ? (
+                                                <div title={`Paid on ${booking.paymentDetails?.paidOn}`}>
                                                     <span className="px-2 py-1 rounded-full bg-green-100 text-green-700 font-semibold">Paid</span>
                                                 </div>
                                             ) : (
@@ -231,12 +556,18 @@ const ManageDemos: React.FC = () => {
                                     </td>
                                     <td className="py-3 px-4 border-b border-slate-200">
                                         {booking.status === 'Pending' && (
-                                            <button onClick={() => setScheduleModalState({ isOpen: true, booking })} className="px-3 py-1 bg-green-600 text-white text-sm rounded-md hover:bg-green-700">
+                                            <button 
+                                                onClick={() => setScheduleModalState({ isOpen: true, booking })} 
+                                                className="px-3 py-1 bg-green-600 text-white text-sm rounded-md hover:bg-green-700 transition-colors"
+                                            >
                                                 Accept
                                             </button>
                                         )}
                                          {booking.status === 'Scheduled' && (
-                                            <button onClick={() => setScheduleModalState({ isOpen: true, booking })} className="px-3 py-1 bg-yellow-500 text-white text-sm rounded-md hover:bg-yellow-600">
+                                            <button 
+                                                onClick={() => setScheduleModalState({ isOpen: true, booking })} 
+                                                className="px-3 py-1 bg-yellow-500 text-white text-sm rounded-md hover:bg-yellow-600 transition-colors"
+                                            >
                                                 Reschedule
                                             </button>
                                         )}
@@ -246,7 +577,7 @@ const ManageDemos: React.FC = () => {
                             {filteredBookings.length === 0 && (
                                 <tr>
                                     <td colSpan={8} className="text-center py-8 text-gray-500">
-                                        No demo bookings found matching your search.
+                                        {bookings.length === 0 ? 'No demo bookings found.' : 'No demo bookings matching your search.'}
                                     </td>
                                 </tr>
                             )}

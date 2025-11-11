@@ -1,16 +1,56 @@
-import React, { useState, useMemo } from 'react';
-import { users } from '../../data/mockData';
+import React, { useState, useMemo, useEffect } from 'react';
+import { getTeachers, deleteTeacher } from '../../services/api'; // Import deleteTeacher
 import type { Teacher } from '../../types';
 import AddEditTeacherModal from '../../components/AddEditTeacherModal';
 import ConfirmationModal from '../../components/ConfirmationModal';
 import { useSearch } from '../../context/SearchContext';
 
 const ManageTeachers: React.FC = () => {
-  const [teachers, setTeachers] = useState<Teacher[]>(users.filter(u => u.role === 'teacher') as Teacher[]);
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTeacher, setEditingTeacher] = useState<Teacher | null>(null);
   const [deletingTeacher, setDeletingTeacher] = useState<Teacher | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string>('');
   const { searchQuery } = useSearch();
+
+  // Fetch teachers from API on component mount
+  useEffect(() => {
+    const fetchTeachers = async () => {
+      try {
+        setLoading(true);
+        setError('');
+        const response = await getTeachers();
+        
+        if (response.success && response.data) {
+          // Transform API data to match your Teacher type
+          const teachersData: Teacher[] = response.data.map((teacher: any) => ({
+            id: teacher.id,
+            name: teacher.name,
+            email: teacher.email,
+            mobile: teacher.mobile || '',
+            specialization: teacher.specialization || 'Not specified',
+            city: teacher.city || '',
+            address: teacher.address || '',
+            affiliateId: teacher.affiliateId || '',
+            commissionPercentage: teacher.commissionPercentage || 0,
+            role: 'teacher',
+            earnings: teacher.earnings || 0
+          }));
+          setTeachers(teachersData);
+        } else {
+          setError(response.message || 'Failed to load teachers');
+        }
+      } catch (error: any) {
+        console.error('Error fetching teachers:', error);
+        setError(error.message || 'Failed to load teachers. Please try again.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchTeachers();
+  }, []);
 
   const filteredTeachers = useMemo(() => {
     if (!searchQuery) {
@@ -38,13 +78,6 @@ const ManageTeachers: React.FC = () => {
         return t;
     });
     setTeachers(updatedTeachers);
-    
-    // Also update the global users array for persistence during session
-    const userIndex = users.findIndex(u => u.id === teacherId);
-    if(userIndex > -1) {
-        const teacherToUpdate = users[userIndex] as Teacher;
-        users[userIndex] = {...teacherToUpdate, commissionPercentage: updatedTeachers.find(t => t.id === teacherId)?.commissionPercentage};
-    }
   };
   
   const handleOpenAddModal = () => {
@@ -62,25 +95,31 @@ const ManageTeachers: React.FC = () => {
       setEditingTeacher(null);
   };
 
-  const handleSaveTeacher = (teacherData: Omit<Teacher, 'id' | 'role' | 'earnings'>) => {
-    if (editingTeacher) {
-        // Edit
-        const updatedTeachers = teachers.map(t => t.id === editingTeacher.id ? { ...editingTeacher, ...teacherData } : t);
-        setTeachers(updatedTeachers);
-        const userIndex = users.findIndex(u => u.id === editingTeacher.id);
-        if (userIndex > -1) {
-            users[userIndex] = { ...users[userIndex], ...teacherData };
-        }
-    } else {
-        // Add
-        const newTeacher: Teacher = {
-            ...teacherData,
-            id: Date.now(),
-            role: 'teacher',
-        };
-        setTeachers(prev => [...prev, newTeacher]);
-        users.push(newTeacher);
+  const handleSaveTeacher = async (teacherData: Omit<Teacher, 'id' | 'role' | 'earnings'>) => {
+    try {
+      // Refresh the teachers list after adding/editing
+      const response = await getTeachers();
+      if (response.success && response.data) {
+        const teachersData: Teacher[] = response.data.map((teacher: any) => ({
+          id: teacher.id,
+          name: teacher.name,
+          email: teacher.email,
+          mobile: teacher.mobile || '',
+          specialization: teacher.specialization || 'Not specified',
+          city: teacher.city || '',
+          address: teacher.address || '',
+          affiliateId: teacher.affiliateId || '',
+          commissionPercentage: teacher.commissionPercentage || 0,
+          role: 'teacher',
+          earnings: teacher.earnings || 0
+        }));
+        setTeachers(teachersData);
+      }
+    } catch (error) {
+      console.error('Error refreshing teachers:', error);
+      setError('Failed to refresh teachers list');
     }
+    
     handleCloseModal();
   };
 
@@ -88,16 +127,58 @@ const ManageTeachers: React.FC = () => {
       setDeletingTeacher(teacher);
   };
   
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
       if(deletingTeacher) {
-          setTeachers(prev => prev.filter(t => t.id !== deletingTeacher.id));
-          const userIndex = users.findIndex(u => u.id === deletingTeacher.id);
-          if (userIndex > -1) {
-              users.splice(userIndex, 1);
+          try {
+              console.log('Deleting teacher:', deletingTeacher.id);
+              
+              const response = await deleteTeacher(deletingTeacher.id);
+              
+              if (response.success) {
+                  console.log('Teacher deleted successfully');
+                  
+                  // Refresh the teachers list
+                  const teachersResponse = await getTeachers();
+                  if (teachersResponse.success && teachersResponse.data) {
+                    const teachersData: Teacher[] = teachersResponse.data.map((teacher: any) => ({
+                      id: teacher.id,
+                      name: teacher.name,
+                      email: teacher.email,
+                      mobile: teacher.mobile || '',
+                      specialization: teacher.specialization || 'Not specified',
+                      city: teacher.city || '',
+                      address: teacher.address || '',
+                      affiliateId: teacher.affiliateId || '',
+                      commissionPercentage: teacher.commissionPercentage || 0,
+                      role: 'teacher',
+                      earnings: teacher.earnings || 0
+                    }));
+                    setTeachers(teachersData);
+                  }
+                  
+                  setError(''); // Clear any previous errors
+              } else {
+                  setError(response.message || 'Failed to delete teacher');
+              }
+          } catch (error: any) {
+              console.error('Error deleting teacher:', error);
+              setError(error.message || 'Failed to delete teacher. Please try again.');
+          } finally {
+              setDeletingTeacher(null);
           }
-          setDeletingTeacher(null);
       }
   };
+
+  // Add loading state
+  if (loading) {
+    return (
+      <div className="bg-white p-6 rounded-xl shadow-lg">
+        <div className="flex justify-center items-center h-32">
+          <div className="text-lg text-gray-600">Loading teachers...</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -106,6 +187,13 @@ const ManageTeachers: React.FC = () => {
         <h2 className="text-xl font-bold text-gray-800">Teachers List ({filteredTeachers.length})</h2>
         <button onClick={handleOpenAddModal} className="px-4 py-2 bg-brand-purple text-white rounded-md hover:bg-opacity-90 transition-colors w-full sm:w-auto">Add Teacher</button>
       </div>
+
+      {error && (
+        <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+          {error}
+        </div>
+      )}
+      
       <div className="overflow-x-auto">
         <table className="min-w-full bg-white">
           <thead className="bg-slate-100">
@@ -152,10 +240,10 @@ const ManageTeachers: React.FC = () => {
                 </td>
               </tr>
             ))}
-             {filteredTeachers.length === 0 && (
+             {filteredTeachers.length === 0 && !loading && (
               <tr>
                 <td colSpan={6} className="text-center py-8 text-gray-500">
-                  No teachers found matching your search.
+                  {teachers.length === 0 ? 'No teachers found.' : 'No teachers matching your search.'}
                 </td>
               </tr>
             )}
