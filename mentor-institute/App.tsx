@@ -28,9 +28,9 @@ import ContestWinners from './pages/ContestWinners';
 
 const App: React.FC = () => {
   return (
-    <NotificationProvider>
+    <HashRouter>
       <AuthProvider>
-        <HashRouter>
+        <NotificationProvider>
           <div className="flex flex-col min-h-screen font-sans">
             <Header />
             <PageBanner />
@@ -57,7 +57,8 @@ const App: React.FC = () => {
                   <Route path="/contest/:contestId/guidelines" element={<ContestGuidelines />} />
                   <Route path="/contest/:contestId/start" element={<ContestScreen />} />
                   <Route path="/contest/:contestId/winners" element={<ContestWinners />} />
-                  <Route path="/solution/:resultType/:resultId" element={<SolutionScreen />} />
+                  {/* <Route path="/solution/:resultType/:resultId" element={<SolutionScreen />} /> */}
+                  <Route path="/test-results/:resultId" element={<SolutionScreen />} />
                 </Route>
 
               </Routes>
@@ -65,9 +66,9 @@ const App: React.FC = () => {
             <Footer />
             <ScrollToTopButton />
           </div>
-        </HashRouter>
+        </NotificationProvider>
       </AuthProvider>
-    </NotificationProvider>
+    </HashRouter>
   );
 };
 

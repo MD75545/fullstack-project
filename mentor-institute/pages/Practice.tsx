@@ -1,15 +1,35 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { practiceTests, testCategories } from '../data/mockData';
+import { getPracticeTests, getTestModuleCategories } from '../services/api';
 import LoginModal from '../components/LoginModal';
+
+interface Test {
+  test_id: number;
+  name: string;
+  category_id: number;
+  type: string;
+  duration_minutes: number;
+  start_time?: string;
+  entry_fee?: number;
+  prize_money?: number;
+  min_participants?: number;
+  category?: {
+    test_category_id: number;
+    name: string;
+  };
+}
+
+interface TestCategory {
+  test_category_id: number;
+  name: string;
+}
 
 const SearchIcon = () => (
     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
     </svg>
 );
-
 
 const Practice: React.FC = () => {
     useEffect(() => {
@@ -20,17 +40,83 @@ const Practice: React.FC = () => {
     const [selectedCategory, setSelectedCategory] = useState<string>('all');
     const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
     const [selectedTestId, setSelectedTestId] = useState<number | null>(null);
+    const [tests, setTests] = useState<Test[]>([]);
+    const [categories, setCategories] = useState<TestCategory[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
     const { user } = useAuth();
     const navigate = useNavigate();
 
+    // Fetch tests and categories from API
+    useEffect(() => {
+        const fetchData = async () => {
+            try {
+                setLoading(true);
+                setError(null);
+
+                // Fetch practice tests
+                const testsResponse = await getPracticeTests();
+                console.log('Tests response:', testsResponse);
+                
+                // Handle different response structures
+                if (testsResponse.status === 'success' || testsResponse.success === true) {
+                    // Check if data is an array or object
+                    const testsData = testsResponse.data;
+                    if (Array.isArray(testsData)) {
+                        setTests(testsData);
+                    } else if (testsData && typeof testsData === 'object') {
+                        // If data is an object, try to extract array from it
+                        const dataArray = Object.values(testsData);
+                        if (Array.isArray(dataArray) && dataArray.length > 0) {
+                            setTests(dataArray);
+                        } else {
+                            setTests([]);
+                        }
+                    } else {
+                        setTests([]);
+                    }
+                } else {
+                    throw new Error(testsResponse.message || 'Failed to fetch tests');
+                }
+
+                // Fetch test categories - using the correct function name
+                const categoriesResponse = await getTestModuleCategories();
+                console.log('Categories response:', categoriesResponse);
+                
+                // Handle different response structures for categories
+                if (categoriesResponse.status === 'success' || categoriesResponse.success === true) {
+                    const categoriesData = categoriesResponse.data;
+                    if (Array.isArray(categoriesData)) {
+                        setCategories(categoriesData);
+                    } else {
+                        setCategories([]);
+                    }
+                } else {
+                    throw new Error(categoriesResponse.message || 'Failed to fetch categories');
+                }
+
+            } catch (err) {
+                console.error('Error fetching data:', err);
+                setError(err instanceof Error ? err.message : 'Failed to load tests');
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchData();
+    }, []);
+
     const filteredTests = useMemo(() => {
-        return practiceTests.filter(test => {
-            const matchesCategory = selectedCategory === 'all' || test.categoryId === parseInt(selectedCategory);
+        if (!Array.isArray(tests)) {
+            return [];
+        }
+        return tests.filter(test => {
+            const matchesCategory = selectedCategory === 'all' || test.category_id === parseInt(selectedCategory);
             const matchesSearch = test.name.toLowerCase().includes(searchQuery.toLowerCase());
             return matchesCategory && matchesSearch;
         });
-    }, [searchQuery, selectedCategory]);
+    }, [searchQuery, selectedCategory, tests]);
 
     const handleStartTestClick = (testId: number) => {
         if (user) {
@@ -49,8 +135,50 @@ const Practice: React.FC = () => {
     };
 
     const getCategoryName = (categoryId: number): string => {
-        return testCategories.find(c => c.id === categoryId)?.name || 'Unknown';
+        const category = categories.find(c => c.test_category_id === categoryId);
+        return category?.name || 'Unknown Category';
     };
+
+    if (loading) {
+        return (
+            <div className="bg-white py-16">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <div className="text-center">
+                        <h2 className="text-3xl font-extrabold text-brand-navy sm:text-4xl">Practice Tests</h2>
+                    </div>
+                    <div className="mt-12 text-center">
+                        <div className="animate-pulse">
+                            <div className="h-4 bg-gray-200 rounded w-3/4 mx-auto mb-4"></div>
+                            <div className="h-4 bg-gray-200 rounded w-1/2 mx-auto"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="bg-white py-16">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <div className="text-center">
+                        <h2 className="text-3xl font-extrabold text-brand-navy sm:text-4xl">Practice Tests</h2>
+                    </div>
+                    <div className="mt-12 text-center">
+                        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+                            <p>{error}</p>
+                            <button 
+                                onClick={() => window.location.reload()}
+                                className="mt-2 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+                            >
+                                Retry
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <>
@@ -58,10 +186,13 @@ const Practice: React.FC = () => {
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div className="text-center">
                     <h2 className="text-3xl font-extrabold text-brand-navy sm:text-4xl">Practice Tests</h2>
+                    <p className="mt-4 text-lg text-gray-600">
+                        Test your skills with our practice tests
+                    </p>
                 </div>
 
                 {/* Filters */}
-                <div className="mt-12 max-w-4xl mx-auto grid grid-cols-2 gap-4 items-end">
+                <div className="mt-12 max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
                     <div className="relative">
                         <label htmlFor="search-test" className="block text-sm font-medium text-gray-700">Search Test</label>
                          <div className="mt-1 relative rounded-md shadow-sm">
@@ -87,8 +218,8 @@ const Practice: React.FC = () => {
                             className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-brand-purple focus:border-brand-purple sm:text-sm rounded-md"
                         >
                             <option value="all">All Categories</option>
-                            {testCategories.map(cat => (
-                                <option key={cat.id} value={cat.id}>{cat.name}</option>
+                            {categories.map(cat => (
+                                <option key={cat.test_category_id} value={cat.test_category_id}>{cat.name}</option>
                             ))}
                         </select>
                     </div>
@@ -103,23 +234,28 @@ const Practice: React.FC = () => {
                                     <th scope="col" className="px-2 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12 sm:w-16">Sr.No</th>
                                     <th scope="col" className="px-2 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Test Name</th>
                                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">Category</th>
+                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">Duration</th>
                                     <th scope="col" className="relative px-2 sm:px-6 py-3"><span className="sr-only">Start Test</span></th>
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
                                 {filteredTests.length > 0 ? filteredTests.map((test, index) => (
-                                    <tr key={test.id} className="hover:bg-gray-50">
+                                    <tr key={test.test_id} className="hover:bg-gray-50">
                                         <td className="px-2 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm font-medium text-gray-900">{index + 1}</td>
                                         <td className="px-2 sm:px-6 py-4 whitespace-nowrap">
                                             <div className="text-xs sm:text-sm text-gray-800 font-semibold">{test.name}</div>
                                             <div className="text-xs text-gray-500 sm:hidden mt-1">
-                                                {getCategoryName(test.categoryId)}
+                                                {getCategoryName(test.category_id)}
+                                            </div>
+                                            <div className="text-xs text-gray-500 sm:hidden mt-1">
+                                                Duration: {test.duration_minutes} mins
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 hidden sm:table-cell">{getCategoryName(test.categoryId)}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 hidden sm:table-cell">{getCategoryName(test.category_id)}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 hidden sm:table-cell">{test.duration_minutes} mins</td>
                                         <td className="px-2 sm:px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                             <button
-                                                onClick={() => handleStartTestClick(test.id)}
+                                                onClick={() => handleStartTestClick(test.test_id)}
                                                 className="text-white bg-brand-purple hover:bg-opacity-90 font-bold py-1 px-3 sm:py-2 sm:px-4 rounded text-xs sm:text-sm"
                                             >
                                                 Start
@@ -128,8 +264,8 @@ const Practice: React.FC = () => {
                                     </tr>
                                 )) : (
                                     <tr>
-                                        <td colSpan={4} className="text-center py-8 text-gray-500">
-                                            No tests found matching your criteria.
+                                        <td colSpan={5} className="text-center py-8 text-gray-500">
+                                            {tests.length === 0 ? 'No tests available.' : 'No tests found matching your criteria.'}
                                         </td>
                                     </tr>
                                 )}

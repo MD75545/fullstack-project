@@ -6,6 +6,7 @@ use App\Http\Controllers\PartnerController;
 use App\Http\Controllers\TaskController;
 use App\Http\Controllers\TeacherController;
 use App\Http\Controllers\TestCategoryController;
+use App\Http\Controllers\TestController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\StudentController;
 use App\Http\Controllers\AuthController;
@@ -46,7 +47,10 @@ Route::post('/students', [StudentController::class, 'store']);
 Route::put('/students/{userId}', [StudentController::class, 'update']);
 Route::delete('/students/{userId}', [StudentController::class, 'destroy']);
 Route::get('/students-options/options', [StudentController::class, 'getOptions']);
+// student profile section
+Route::post('/students/{userId}/profile', [StudentController::class, 'updateProfile']);
 
+Route::post('/students/{userId}', [StudentController::class, 'update']); // Changed to POST for file uploads
 // Courses routes
 Route::get('/courses', [CourseController::class, 'index']);
 Route::get('/courses/{courseId}', [CourseController::class, 'show']);
@@ -107,3 +111,30 @@ Route::get('/debug-commission/{demoId}', function ($demoId) {
     ]);
 });
 
+// Auth routes
+Route::post('/login', [AuthController::class, 'login']);
+Route::get('/user/{userId}', [AuthController::class, 'getUser']);
+
+Route::post('/test-password', [AuthController::class, 'testPassword']);
+
+Route::get('/generate-proper-hash', function() {
+    $password = 'password123';
+    $properHash = Hash::make($password);
+    
+    return response()->json([
+        'password' => $password,
+        'proper_bcrypt_hash' => $properHash,
+        'hash_length' => strlen($properHash)
+    ]);
+});
+
+// Add this to your students routes
+Route::post('/students/{userId}/photo', [StudentController::class, 'updatePhoto']);
+
+// Test routes
+Route::get('/test-categories', [TestController::class, 'getTestCategories']);
+Route::get('/practice-tests', [TestController::class, 'getPracticeTests']);
+Route::get('/tests/{testId}', [TestController::class, 'getTestWithQuestions']);
+Route::post('/test-results', [TestController::class, 'submitTestResult']);
+Route::get('/users/{userId}/test-results', [TestController::class, 'getUserTestResults']);
+Route::get('/test-results/{testResultId}', [TestController::class, 'getTestResultDetails']);

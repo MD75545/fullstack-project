@@ -52,16 +52,29 @@ const LoginModal: React.FC<LoginModalProps> = ({ onClose, onSuccess, showSignUp 
     
     const { login } = useAuth();
 
-    const handleLoginSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        setLoginError('');
-        const success = login(loginEmail, loginPassword);
-        if (success) {
-            onSuccess();
-        } else {
-            setLoginError('Invalid email or password.');
-        }
-    };
+   const handleLoginSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  setLoginError('');
+  
+  try {
+    console.log('LoginModal: Starting login process...');
+    console.log('LoginModal: Email:', loginEmail);
+    
+    const success = await login(loginEmail, loginPassword);
+    console.log('LoginModal: Login result:', success);
+    
+    if (success) {
+      console.log('LoginModal: Login successful, calling onSuccess');
+      onSuccess();
+    } else {
+      console.log('LoginModal: Login failed, showing error');
+      setLoginError('Invalid email or password.');
+    }
+  } catch (error) {
+    console.error('LoginModal: Login error:', error);
+    setLoginError('Login failed. Please try again.');
+  }
+};
     
     const handleSignupChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value, type, checked } = e.target;

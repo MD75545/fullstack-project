@@ -175,4 +175,85 @@ class StudentService
 
         return 500;
     }
+
+     public function getStudentProfile(int $userId): array
+    {
+        try {
+            $student = $this->studentRepository->getStudentWithDetails($userId);
+
+            if (!$student) {
+                return [
+                    'success' => false,
+                    'message' => 'Student not found',
+                    'data' => null,
+                    'status_code' => 404
+                ];
+            }
+
+            return [
+                'success' => true,
+                'message' => 'Student profile retrieved successfully',
+                'data' => $student,
+                'status_code' => 200
+            ];
+
+        } catch (Exception $e) {
+            \Log::error('Get student profile error: ' . $e->getMessage());
+            
+            return [
+                'success' => false,
+                'message' => $e->getMessage(),
+                'data' => null,
+                'status_code' => 500
+            ];
+        }
+    }
+
+    public function updateStudentProfile(int $userId, array $profileData): array
+    {
+        try {
+            $result = $this->studentRepository->updateStudentProfile($userId, $profileData);
+
+            return [
+                'success' => true,
+                'message' => 'Student profile updated successfully',
+                'data' => $result,
+                'status_code' => 200
+            ];
+
+        } catch (Exception $e) {
+            \Log::error('Update student profile error: ' . $e->getMessage());
+            
+            return [
+                'success' => false,
+                'message' => $e->getMessage(),
+                'data' => null,
+                'status_code' => 500
+            ];
+        }
+    }
+
+    public function updateStudentPhoto(int $userId, $image): array
+    {
+        try {
+            $result = $this->studentRepository->updateStudentPhoto($userId, $image);
+
+            return [
+                'success' => true,
+                'message' => 'Student photo updated successfully',
+                'data' => $result,
+                'status_code' => 200
+            ];
+
+        } catch (Exception $e) {
+            \Log::error('Update student photo error: ' . $e->getMessage());
+            
+            return [
+                'success' => false,
+                'message' => $e->getMessage(),
+                'data' => null,
+                'status_code' => 500
+            ];
+        }
+    }
 }

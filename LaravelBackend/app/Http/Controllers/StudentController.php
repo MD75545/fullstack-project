@@ -8,6 +8,8 @@ use App\Http\Requests\UpdateStudentRequest;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Log;
+use App\Http\Requests\UpdateStudentProfileRequest;
+use Illuminate\Http\Request;
 
 class StudentController extends Controller
 {
@@ -19,27 +21,27 @@ class StudentController extends Controller
     }
 
     public function index(): JsonResponse
-{
-    \Log::info('Fetching all students');
-    
-    $result = $this->studentService->getAllStudents();
+    {
+        \Log::info('Fetching all students');
+        
+        $result = $this->studentService->getAllStudents();
 
-    \Log::info('Students fetch result', [
-        'success' => $result['success'],
-        'count' => $result['data'] ? count($result['data']) : 0,
-        'data_sample' => $result['data'] ? $result['data']->first() : null
-    ]);
+        \Log::info('Students fetch result', [
+            'success' => $result['success'],
+            'count' => $result['data'] ? count($result['data']) : 0,
+            'data_sample' => $result['data'] ? $result['data']->first() : null
+        ]);
 
-    $statusCode = $result['status_code'];
-    $response = [
-        'status' => $result['success'] ? 'success' : 'error',
-        'message' => $result['message'],
-        'data' => $result['data'],
-        'count' => $result['data'] ? count($result['data']) : 0
-    ];
+        $statusCode = $result['status_code'];
+        $response = [
+            'status' => $result['success'] ? 'success' : 'error',
+            'message' => $result['message'],
+            'data' => $result['data'],
+            'count' => $result['data'] ? count($result['data']) : 0
+        ];
 
-    return response()->json($response, $statusCode);
-}
+        return response()->json($response, $statusCode);
+    }
 
     public function show(int $userId): JsonResponse
     {
@@ -135,5 +137,62 @@ class StudentController extends Controller
         return response()->json($response, $statusCode);
     }
 
+    // New methods for profile management
+    public function showProfile(int $userId): JsonResponse
+    {
+        \Log::info('Fetching student profile', ['user_id' => $userId]);
+        
+        $result = $this->studentService->getStudentProfile($userId);
 
+        \Log::info('Student profile fetch result', ['found' => $result['success']]);
+
+        $statusCode = $result['status_code'];
+        $response = [
+            'status' => $result['success'] ? 'success' : 'error',
+            'message' => $result['message'],
+            'data' => $result['data']
+        ];
+
+        return response()->json($response, $statusCode);
+    }
+
+    public function updateProfile(UpdateStudentProfileRequest $request, int $userId): JsonResponse
+{
+    \Log::info('Student profile update request received', ['user_id' => $userId]);
+    
+    $updateResult = $this->studentService->updateStudentProfile($userId, $request->validated());
+
+    \Log::info('Student profile update result', $updateResult);
+
+    $statusCode = $updateResult['status_code'];
+    $response = [
+        'status' => $updateResult['success'] ? 'success' : 'error',
+        'message' => $updateResult['message'],
+        'data' => $updateResult['data']
+    ];
+
+    return response()->json($response, $statusCode);
+}
+
+    public function updatePhoto(Request $request, int $userId): JsonResponse
+    {
+        \Log::info('Student photo update request received', ['user_id' => $userId]);
+        
+        $request->validate([
+            'photo' => 'required|image|mimes:jpeg,png,jpg,gif|max:2048',
+        ]);
+
+        $updateResult = $this->studentService->updateStudentPhoto($userId, $request->file('photo'));
+
+        \Log::info('Student photo update result', $updateResult);
+
+        $statusCode = $updateResult['status_code'];
+        $response = [
+            'status' => $updateResult['success'] ? 'success' : 'error',
+            'message' => $updateResult['message'],
+            'data' => $updateResult['data']
+        ];
+
+        return response()->json($response, $statusCode);
+    }
 }

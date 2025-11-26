@@ -1330,39 +1330,14 @@ export const getTestCategories = async () => {
       data = await response.json();
     } else {
       const text = await response.text();
-      console.error('Non-JSON response:', text);
       throw new Error(`Unexpected response: ${text}`);
     }
 
-    if (!response.ok) {
-      const errorMessage = data.message || `HTTP error! status: ${response.status}`;
-      throw new Error(errorMessage);
-    }
-
     console.log('Test categories API response data:', data);
-    
-    // Handle different response structures
-    if (data.status === 'success') {
-      return {
-        success: true,
-        message: data.message,
-        data: data.data
-      };
-    } else {
-      return {
-        success: data.success || false,
-        message: data.message || 'Unknown error',
-        data: data.data || null
-      };
-    }
+    return data;
     
   } catch (error) {
     console.error('Get Test Categories Error Details:', error);
-    
-    if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
-      throw new Error('Network error: Cannot connect to the server. Make sure Laravel is running on port 8000.');
-    }
-    
     throw error;
   }
 };
@@ -1492,6 +1467,529 @@ export const deleteTestCategory = async (categoryId) => {
     
   } catch (error) {
     console.error('Delete Test Category Error Details:', error);
+    
+    if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+      throw new Error('Network error: Cannot connect to the server. Make sure Laravel is running on port 8000.');
+    }
+    
+    throw error;
+  }
+};
+
+// Login function
+export const loginUser = async (email, password) => {
+  try {
+    console.log('Making login API call to:', `${API_BASE_URL}/login`);
+
+    const response = await fetch(`${API_BASE_URL}/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({ email, password }),
+    });
+
+    console.log('Login response status:', response.status);
+
+    let data;
+    const contentType = response.headers.get('content-type');
+    
+    if (contentType && contentType.includes('application/json')) {
+      data = await response.json();
+    } else {
+      const text = await response.text();
+      throw new Error(`Unexpected response: ${text}`);
+    }
+
+    if (!response.ok) {
+      const errorMessage = data.message || 
+                          (data.errors ? Object.values(data.errors).flat().join(', ') : `HTTP error! status: ${response.status}`);
+      throw new Error(errorMessage);
+    }
+
+    console.log('Login API response data:', data);
+    return data;
+    
+  } catch (error) {
+    console.error('Login Error Details:', error);
+    
+    if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+      throw new Error('Network error: Cannot connect to the server. Make sure Laravel is running on port 8000.');
+    }
+    
+    throw error;
+  }
+};
+
+// Get user details function
+export const getUser = async (userId) => {
+  try {
+    console.log('Fetching user from:', `${API_BASE_URL}/user/${userId}`);
+
+    const response = await fetch(`${API_BASE_URL}/user/${userId}`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+      },
+    });
+
+    console.log('Get user response status:', response.status);
+
+    let data;
+    const contentType = response.headers.get('content-type');
+    
+    if (contentType && contentType.includes('application/json')) {
+      data = await response.json();
+    } else {
+      const text = await response.text();
+      throw new Error(`Unexpected response: ${text}`);
+    }
+
+    if (!response.ok) {
+      const errorMessage = data.message || `HTTP error! status: ${response.status}`;
+      throw new Error(errorMessage);
+    }
+
+    console.log('Get user API response data:', data);
+    return data;
+    
+  } catch (error) {
+    console.error('Get User Error Details:', error);
+    
+    if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+      throw new Error('Network error: Cannot connect to the server. Make sure Laravel is running on port 8000.');
+    }
+    
+    throw error;
+  }
+};
+
+// Add this function to your existing API functions
+export const getStudentDetails = async (userId) => {
+  try {
+    console.log('Fetching student details from:', `${API_BASE_URL}/students/${userId}`);
+
+    const response = await fetch(`${API_BASE_URL}/students/${userId}`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+      },
+    });
+
+    console.log('Student details response status:', response.status);
+
+    let data;
+    const contentType = response.headers.get('content-type');
+    
+    if (contentType && contentType.includes('application/json')) {
+      data = await response.json();
+    } else {
+      const text = await response.text();
+      console.error('Non-JSON response:', text);
+      throw new Error(`Unexpected response: ${text}`);
+    }
+
+    if (!response.ok) {
+      const errorMessage = data.message || `HTTP error! status: ${response.status}`;
+      throw new Error(errorMessage);
+    }
+
+    console.log('Student details API response data:', data);
+    
+    // Ensure consistent response structure
+    return {
+      success: data.status === 'success' || data.success === true,
+      message: data.message || 'Student details retrieved successfully',
+      data: data.data || data // Handle both structures
+    };
+    
+  } catch (error) {
+    console.error('Get Student Details Error Details:', error);
+    
+    if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+      throw new Error('Network error: Cannot connect to the server. Make sure Laravel is running on port 8000.');
+    }
+    
+    throw error;
+  }
+};
+
+// Update the updateStudentProfile function to use profile-specific endpoint
+export const updateStudentProfile = async (userId, profileData) => {
+  try {
+    console.log('Updating student profile:', `${API_BASE_URL}/students/${userId}/profile`);
+    
+    const formData = new FormData();
+    
+    // Append only profile-related data (no course_id, teacher_id, etc.)
+    formData.append('name', profileData.name);
+    formData.append('email', profileData.email);
+    formData.append('display_name_preference', profileData.display_name_preference);
+    formData.append('gender', profileData.gender);
+    
+    // Append optional fields
+    if (profileData.mobile) formData.append('mobile', profileData.mobile);
+    if (profileData.city) formData.append('city', profileData.city);
+    if (profileData.address) formData.append('address', profileData.address);
+    
+    // Append photo if it's a file
+    if (profileData.photo && profileData.photo instanceof File) {
+      formData.append('photo', profileData.photo);
+    }
+
+    // Use POST for profile-specific endpoint (no _method needed since it's a custom endpoint)
+    const response = await fetch(`${API_BASE_URL}/students/${userId}/profile`, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        // Don't set Content-Type for FormData
+      },
+      body: formData,
+    });
+
+    console.log('Update student profile response status:', response.status);
+
+    let data;
+    const contentType = response.headers.get('content-type');
+    
+    if (contentType && contentType.includes('application/json')) {
+      data = await response.json();
+    } else {
+      const text = await response.text();
+      throw new Error(`Unexpected response: ${text}`);
+    }
+
+    if (!response.ok) {
+      const errorMessage = data.message || 
+                          (data.errors ? Object.values(data.errors).flat().join(', ') : `HTTP error! status: ${response.status}`);
+      throw new Error(errorMessage);
+    }
+
+    console.log('Update student profile response data:', data);
+    return data;
+    
+  } catch (error) {
+    console.error('Update Student Profile Error Details:', error);
+    
+    if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+      throw new Error('Network error: Cannot connect to the server. Make sure Laravel is running on port 8000.');
+    }
+    
+    throw error;
+  }
+};
+
+// Add this to your existing API functions in api.js
+export const updateStudentPhoto = async (userId, photoFile) => {
+  try {
+    console.log('Updating student photo:', `${API_BASE_URL}/students/${userId}/photo`);
+
+    const formData = new FormData();
+    formData.append('photo', photoFile);
+
+    const response = await fetch(`${API_BASE_URL}/students/${userId}/photo`, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        // Don't set Content-Type - let browser set it with boundary
+      },
+      body: formData,
+    });
+
+    console.log('Update student photo response status:', response.status);
+
+    let data;
+    const contentType = response.headers.get('content-type');
+    
+    if (contentType && contentType.includes('application/json')) {
+      data = await response.json();
+    } else {
+      const text = await response.text();
+      throw new Error(`Unexpected response: ${text}`);
+    }
+
+    if (!response.ok) {
+      const errorMessage = data.message || 
+                          (data.errors ? Object.values(data.errors).flat().join(', ') : `HTTP error! status: ${response.status}`);
+      throw new Error(errorMessage);
+    }
+
+    console.log('Update student photo response data:', data);
+    return data;
+    
+  } catch (error) {
+    console.error('Update Student Photo Error Details:', error);
+    
+    if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+      throw new Error('Network error: Cannot connect to the server. Make sure Laravel is running on port 8000.');
+    }
+    
+    throw error;
+  }
+};
+
+// Test API functions
+
+export const getTestModuleCategories = async () => {
+  try {
+    console.log('Fetching test categories from:', `${API_BASE_URL}/test-categories`);
+
+    const response = await fetch(`${API_BASE_URL}/test-categories`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+      },
+    });
+
+    console.log('Test categories response status:', response.status);
+
+    let data;
+    const contentType = response.headers.get('content-type');
+    
+    if (contentType && contentType.includes('application/json')) {
+      data = await response.json();
+    } else {
+      const text = await response.text();
+      throw new Error(`Unexpected response: ${text}`);
+    }
+
+    if (!response.ok) {
+      const errorMessage = data.message || `HTTP error! status: ${response.status}`;
+      throw new Error(errorMessage);
+    }
+
+    console.log('Test categories API response data:', data);
+    return data;
+    
+  } catch (error) {
+    console.error('Get Test Categories Error Details:', error);
+    throw error;
+  }
+};
+
+// In your api.js - make sure the response structure is correct
+export const getPracticeTests = async () => {
+  try {
+    console.log('Fetching practice tests from:', `${API_BASE_URL}/practice-tests`);
+
+    const response = await fetch(`${API_BASE_URL}/practice-tests`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+      },
+    });
+
+    console.log('Practice tests response status:', response.status);
+
+    let data;
+    const contentType = response.headers.get('content-type');
+    
+    if (contentType && contentType.includes('application/json')) {
+      data = await response.json();
+    } else {
+      const text = await response.text();
+      throw new Error(`Unexpected response: ${text}`);
+    }
+
+    console.log('Practice tests API response data:', data);
+    
+    // Return the data as-is, let the component handle the structure
+    return data;
+    
+  } catch (error) {
+    console.error('Get Practice Tests Error Details:', error);
+    throw error;
+  }
+};
+
+
+export const getTestWithQuestions = async (testId) => {
+  try {
+    console.log('Fetching test with questions:', `${API_BASE_URL}/tests/${testId}`);
+
+    const response = await fetch(`${API_BASE_URL}/tests/${testId}`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+      },
+    });
+
+    console.log('Test with questions response status:', response.status);
+
+    let data;
+    const contentType = response.headers.get('content-type');
+    
+    if (contentType && contentType.includes('application/json')) {
+      data = await response.json();
+    } else {
+      const text = await response.text();
+      throw new Error(`Unexpected response: ${text}`);
+    }
+
+    if (!response.ok) {
+      const errorMessage = data.message || `HTTP error! status: ${response.status}`;
+      throw new Error(errorMessage);
+    }
+
+    console.log('Test with questions API response data:', data);
+    return data;
+    
+  } catch (error) {
+    console.error('Get Test With Questions Error Details:', error);
+    throw error;
+  }
+};
+
+export const submitTestResult = async (resultData) => {
+  try {
+    console.log('Submitting test result:', `${API_BASE_URL}/test-results`);
+    console.log('Result data:', resultData);
+
+    const response = await fetch(`${API_BASE_URL}/test-results`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify(resultData),
+    });
+
+    console.log('Submit test result response status:', response.status);
+
+    let data;
+    const contentType = response.headers.get('content-type');
+    
+    if (contentType && contentType.includes('application/json')) {
+      data = await response.json();
+    } else {
+      const text = await response.text();
+      throw new Error(`Unexpected response: ${text}`);
+    }
+
+    if (!response.ok) {
+      const errorMessage = data.message || 
+                          (data.errors ? Object.values(data.errors).flat().join(', ') : `HTTP error! status: ${response.status}`);
+      throw new Error(errorMessage);
+    }
+
+    console.log('Submit test result response data:', data);
+    return data;
+    
+  } catch (error) {
+    console.error('Submit Test Result Error Details:', error);
+    throw error;
+  }
+};
+
+export const getUserTestResults = async (userId) => {
+  try {
+    console.log('Fetching user test results:', `${API_BASE_URL}/users/${userId}/test-results`);
+
+    const response = await fetch(`${API_BASE_URL}/users/${userId}/test-results`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+      },
+    });
+
+    console.log('User test results response status:', response.status);
+
+    let data;
+    const contentType = response.headers.get('content-type');
+    
+    if (contentType && contentType.includes('application/json')) {
+      data = await response.json();
+    } else {
+      const text = await response.text();
+      throw new Error(`Unexpected response: ${text}`);
+    }
+
+    if (!response.ok) {
+      const errorMessage = data.message || `HTTP error! status: ${response.status}`;
+      throw new Error(errorMessage);
+    }
+
+    console.log('User test results API response data:', data);
+    return data;
+    
+  } catch (error) {
+    console.error('Get User Test Results Error Details:', error);
+    throw error;
+  }
+};
+
+export const getTestById = async (testId) => {
+  try {
+    console.log('Fetching test by ID:', `${API_BASE_URL}/tests/${testId}`);
+
+    const response = await fetch(`${API_BASE_URL}/tests/${testId}`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+      },
+    });
+
+    console.log('Get test by ID response status:', response.status);
+
+    let data;
+    const contentType = response.headers.get('content-type');
+    
+    if (contentType && contentType.includes('application/json')) {
+      data = await response.json();
+    } else {
+      const text = await response.text();
+      throw new Error(`Unexpected response: ${text}`);
+    }
+
+    if (!response.ok) {
+      const errorMessage = data.message || `HTTP error! status: ${response.status}`;
+      throw new Error(errorMessage);
+    }
+
+    console.log('Get test by ID response data:', data);
+    return data;
+    
+  } catch (error) {
+    console.error('Get Test By ID Error Details:', error);
+    throw error;
+  }
+};
+
+// Add this function to your api.jsx file
+export const getTestResultDetails = async (testResultId) => {
+  try {
+    console.log('Fetching test result details:', `${API_BASE_URL}/test-results/${testResultId}`);
+
+    const response = await fetch(`${API_BASE_URL}/test-results/${testResultId}`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+      },
+    });
+
+    console.log('Test result details response status:', response.status);
+
+    let data;
+    const contentType = response.headers.get('content-type');
+    
+    if (contentType && contentType.includes('application/json')) {
+      data = await response.json();
+    } else {
+      const text = await response.text();
+      throw new Error(`Unexpected response: ${text}`);
+    }
+
+    if (!response.ok) {
+      const errorMessage = data.message || `HTTP error! status: ${response.status}`;
+      throw new Error(errorMessage);
+    }
+
+    console.log('Test result details API response data:', data);
+    return data;
+    
+  } catch (error) {
+    console.error('Get Test Result Details Error Details:', error);
     
     if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
       throw new Error('Network error: Cannot connect to the server. Make sure Laravel is running on port 8000.');

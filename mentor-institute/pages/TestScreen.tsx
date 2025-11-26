@@ -1,6 +1,35 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { practiceTests, questions as allQuestions } from '../data/mockData';
+import { useAuth } from '../context/AuthContext';
+import { getTestWithQuestions, submitTestResult } from '../services/api';
+
+interface Question {
+  question_id: number;
+  test_id: number;
+  text: string;
+  options: Array<{
+    id: number;
+    text: string;
+  }>;
+  correct_option_id: number;
+}
+
+interface Test {
+  test_id: number;
+  name: string;
+  category_id: number;
+  type: string;
+  duration_minutes: number;
+  start_time?: string;
+  entry_fee?: number;
+  prize_money?: number;
+  min_participants?: number;
+  category?: {
+    test_category_id: number;
+    name: string;
+  };
+  questions: Question[];
+}
 
 // --- Reusable Components for Result Screen ---
 
@@ -28,7 +57,12 @@ const Confetti: React.FC = () => {
     );
 };
 
-const TestResultScreen: React.FC<{ score: { obtained: number; total: number }; onBack: () => void; message: string; }> = ({ score, onBack, message }) => {
+const TestResultScreen: React.FC<{ 
+  score: { obtained: number; total: number }; 
+  onBack: () => void; 
+  message: string; 
+  testName: string;
+}> = ({ score, onBack, message, testName }) => {
     const percentage = score.total > 0 ? (score.obtained / score.total) * 100 : 0;
     const passed = percentage >= 50;
 
@@ -50,7 +84,8 @@ const TestResultScreen: React.FC<{ score: { obtained: number; total: number }; o
             <div className="relative max-w-md mx-auto px-4 text-center bg-white p-10 rounded-lg shadow-lg z-10">
                 {passed ? <SuccessIcon /> : <FailureIcon />}
                 <h1 className="text-3xl font-bold text-brand-navy mt-4">{passed ? "Congratulations!" : "Completed!"}</h1>
-                <p className="text-gray-600 mt-2">{passed ? `You passed the test!` : `Better luck next time!`}</p>
+                <p className="text-gray-600 mt-2">{testName}</p>
+                <p className="text-gray-600 text-sm mt-1">{passed ? `You passed the test!` : `Better luck next time!`}</p>
                 
                 <div className="mt-6 animate-score-pop">
                     <p className="text-gray-600 text-lg">You Scored</p>
@@ -83,9 +118,12 @@ const ConfirmationModal: React.FC<{ onConfirm: () => void; onCancel: () => void;
 const TestScreen: React.FC = () => {
     const { testId } = useParams<{ testId: string }>();
     const navigate = useNavigate();
-    const test = practiceTests.find(t => t.id === parseInt(testId || ''));
-    
-    const questions = useMemo(() => allQuestions.filter(q => q.testId === parseInt(testId || '')), [testId]);
+    const { user } = useAuth();
+
+    const [test, setTest] = useState<Test | null>(null);
+    const [questions, setQuestions] = useState<Question[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
     const [answers, setAnswers] = useState<Record<number, number>>({});
@@ -93,21 +131,134 @@ const TestScreen: React.FC = () => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isSubmitted, setIsSubmitted] = useState(false);
     const [score, setScore] = useState<{ obtained: number; total: number } | null>(null);
-    const [timeLeft, setTimeLeft] = useState(() => test?.duration ? test.duration * 60 : 0);
+    const [timeLeft, setTimeLeft] = useState(0);
 
-    const confirmSubmit = () => {
-        if (isSubmitted) return;
-        
-        let marksObtained = 0;
-        questions.forEach(q => {
-            if (answers[q.id] === q.correctOptionId) {
-                marksObtained++;
+    // Replace the parseOptions function with this corrected version:
+const parseOptions = (options: any): Array<{ id: number; text: string }> => {
+    console.log('Parsing options:', options);
+    
+    if (Array.isArray(options)) {
+        // If it's already an array of objects with id and text
+        if (options.length > 0 && typeof options[0] === 'object' && options[0].id !== undefined) {
+            return options;
+        }
+        // If it's an array of strings, convert to objects with id and text
+        else if (options.length > 0 && typeof options[0] === 'string') {
+            return options.map((optionText: string, index: number) => ({
+                id: index + 1,
+                text: optionText
+            }));
+        }
+    }
+    
+    if (typeof options === 'string') {
+        try {
+            const parsed = JSON.parse(options);
+            console.log('Parsed JSON options:', parsed);
+            
+            if (Array.isArray(parsed)) {
+                // If it's an array of strings, convert to objects
+                if (parsed.length > 0 && typeof parsed[0] === 'string') {
+                    return parsed.map((optionText: string, index: number) => ({
+                        id: index + 1,
+                        text: optionText
+                    }));
+                }
+                // If it's already an array of objects, return as is
+                else if (parsed.length > 0 && typeof parsed[0] === 'object' && parsed[0].id !== undefined) {
+                    return parsed;
+                }
             }
-        });
+        } catch (e) {
+            console.error('Error parsing options:', e);
+        }
+    }
+    
+    // Return default options if parsing fails
+    return [
+        { id: 1, text: 'Option 1' },
+        { id: 2, text: 'Option 2' },
+        { id: 3, text: 'Option 3' },
+        { id: 4, text: 'Option 4' }
+    ];
+};
 
-        setScore({ obtained: marksObtained, total: questions.length });
-        setIsSubmitting(false);
-        setIsSubmitted(true);
+    // Fetch test data from API
+    useEffect(() => {
+        const fetchTestData = async () => {
+            if (!testId) return;
+
+            try {
+                setLoading(true);
+                setError(null);
+
+                const response = await getTestWithQuestions(parseInt(testId));
+                console.log('Full test response:', response);
+                
+                if (response.status === 'success') {
+                    const testData = response.data;
+                    
+                    // Parse questions and their options
+                    const parsedQuestions = testData.questions.map((question: any) => {
+                        const parsedOptions = parseOptions(question.options);
+                        console.log(`Question ${question.question_id} options:`, parsedOptions);
+                        
+                        return {
+                            ...question,
+                            options: parsedOptions
+                        };
+                    });
+
+                    console.log('All parsed questions:', parsedQuestions);
+                    
+                    setTest(testData);
+                    setQuestions(parsedQuestions);
+                    setTimeLeft(testData.duration_minutes * 60);
+                } else {
+                    throw new Error(response.message || 'Failed to fetch test');
+                }
+
+            } catch (err) {
+                console.error('Error fetching test data:', err);
+                setError(err instanceof Error ? err.message : 'Failed to load test');
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchTestData();
+    }, [testId]);
+
+    const confirmSubmit = async () => {
+        if (isSubmitted || !user || !test) return;
+
+        try {
+            setIsSubmitting(true);
+
+            const resultData = {
+                user_id: user.user_id,
+                test_id: test.test_id,
+                answers: answers
+            };
+
+            const response = await submitTestResult(resultData);
+            
+            if (response.status === 'success') {
+                setScore({ 
+                    obtained: response.data.score_obtained, 
+                    total: response.data.total_score 
+                });
+                setIsSubmitted(true);
+            } else {
+                throw new Error(response.message || 'Failed to submit test');
+            }
+
+        } catch (err) {
+            console.error('Error submitting test:', err);
+            setError(err instanceof Error ? err.message : 'Failed to submit test');
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     const confirmSubmitRef = useRef(confirmSubmit);
@@ -115,8 +266,9 @@ const TestScreen: React.FC = () => {
         confirmSubmitRef.current = confirmSubmit;
     });
 
+    // Timer effect
     useEffect(() => {
-        if (!test || isSubmitted) return;
+        if (!test || isSubmitted || timeLeft <= 0) return;
 
         const timer = setInterval(() => {
             setTimeLeft(prevTime => {
@@ -130,18 +282,48 @@ const TestScreen: React.FC = () => {
         }, 1000);
 
         return () => clearInterval(timer);
-    }, [test, isSubmitted]);
+    }, [test, isSubmitted, timeLeft]);
 
+    // Track visited questions
     useEffect(() => {
         setVisited(prev => new Set(prev).add(currentQuestionIndex));
     }, [currentQuestionIndex]);
 
-    if (!test || questions.length === 0) {
+    if (loading) {
+        return (
+            <div className="bg-brand-light min-h-[calc(100vh-128px)] flex items-center justify-center">
+                <div className="text-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-purple mx-auto"></div>
+                    <p className="mt-4 text-gray-600">Loading test...</p>
+                </div>
+            </div>
+        );
+    }
+
+    if (error || !test) {
         return (
             <div className="text-center py-20 bg-brand-light min-h-[calc(100vh-128px)]">
                 <div className="bg-white p-8 max-w-lg mx-auto rounded-lg shadow-md">
-                    <h2 className="text-2xl font-bold text-brand-navy">Test not found or has no questions.</h2>
-                    <Link to="/practice" className="mt-4 inline-block text-brand-purple hover:underline">Back to Practice Tests</Link>
+                    <h2 className="text-2xl font-bold text-brand-navy">
+                        {error || 'Test not found.'}
+                    </h2>
+                    <Link to="/practice" className="mt-4 inline-block text-brand-purple hover:underline">
+                        Back to Practice Tests
+                    </Link>
+                </div>
+            </div>
+        );
+    }
+
+    if (questions.length === 0) {
+        return (
+            <div className="text-center py-20 bg-brand-light min-h-[calc(100vh-128px)]">
+                <div className="bg-white p-8 max-w-lg mx-auto rounded-lg shadow-md">
+                    <h2 className="text-2xl font-bold text-brand-navy">No Questions Available</h2>
+                    <p className="mt-2 text-gray-600">This test doesn't have any questions yet.</p>
+                    <Link to="/practice" className="mt-4 inline-block text-brand-purple hover:underline">
+                        Back to Practice Tests
+                    </Link>
                 </div>
             </div>
         );
@@ -150,6 +332,9 @@ const TestScreen: React.FC = () => {
     const currentQuestion = questions[currentQuestionIndex];
     const answeredCount = Object.keys(answers).length;
     const questionsLeft = questions.length - answeredCount;
+
+    // Get current question options - with fallback
+    const currentQuestionOptions = currentQuestion?.options || [];
 
     const handleAnswerSelect = (questionId: number, optionId: number) => {
         setAnswers(prev => ({ ...prev, [questionId]: optionId }));
@@ -181,6 +366,7 @@ const TestScreen: React.FC = () => {
                 score={score}
                 onBack={() => navigate('/practice')}
                 message="Back to Practice Tests"
+                testName={test.name}
             />
         );
     }
@@ -194,7 +380,9 @@ const TestScreen: React.FC = () => {
                         <h1 className="text-xl sm:text-2xl font-bold text-brand-navy">{test.name}</h1>
                         <div className="flex items-center gap-4">
                              <div className={`flex items-center gap-2 font-semibold ${timeLeft < 60 ? 'text-red-500 animate-pulse' : 'text-gray-700'}`}>
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
                                 <span>{formatTime(timeLeft)}</span>
                             </div>
                             <div className="text-right">
@@ -207,7 +395,7 @@ const TestScreen: React.FC = () => {
                     <div className="flex flex-wrap gap-2 mb-6 p-2 bg-gray-50 rounded-md">
                         {questions.map((q, index) => {
                             const isCurrent = index === currentQuestionIndex;
-                            const hasAnswered = answers[q.id] !== undefined;
+                            const hasAnswered = answers[q.question_id] !== undefined;
                             const hasVisited = visited.has(index);
                             
                             let bgColor = 'bg-gray-200 hover:bg-gray-300';
@@ -216,7 +404,11 @@ const TestScreen: React.FC = () => {
                             if (isCurrent) bgColor = 'bg-brand-purple text-white ring-2 ring-offset-2 ring-brand-purple';
 
                             return (
-                                <button key={q.id} onClick={() => handleQuestionJump(index)} className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm transition-colors ${bgColor}`}>
+                                <button 
+                                    key={q.question_id} 
+                                    onClick={() => handleQuestionJump(index)} 
+                                    className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm transition-colors ${bgColor}`}
+                                >
                                     {index + 1}
                                 </button>
                             );
@@ -225,39 +417,74 @@ const TestScreen: React.FC = () => {
                     
                     {/* Question Area */}
                     <div>
-                        <h2 className="text-lg font-semibold text-gray-800 mb-4">Question {currentQuestionIndex + 1}: {currentQuestion.text}</h2>
-                        <div className="space-y-3">
-                            {currentQuestion.options.map(option => (
-                                <label key={option.id} className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-purple-50 transition-colors">
-                                    <input
-                                        type="radio"
-                                        name={`question-${currentQuestion.id}`}
-                                        value={option.id}
-                                        checked={answers[currentQuestion.id] === option.id}
-                                        onChange={() => handleAnswerSelect(currentQuestion.id, option.id)}
-                                        className="h-4 w-4 text-brand-purple focus:ring-brand-purple border-gray-300"
-                                    />
-                                    <span className="ml-3 text-gray-700">{option.text}</span>
-                                </label>
-                            ))}
-                        </div>
+                        <h2 className="text-lg font-semibold text-gray-800 mb-4">
+                            Question {currentQuestionIndex + 1}: {currentQuestion.text}
+                        </h2>
+                        
+                        {currentQuestionOptions.length > 0 ? (
+                            <div className="space-y-3">
+                                {currentQuestionOptions.map(option => (
+                                    <label 
+                                        key={option.id} 
+                                        className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-purple-50 transition-colors"
+                                    >
+                                        <input
+                                            type="radio"
+                                            name={`question-${currentQuestion.question_id}`}
+                                            value={option.id}
+                                            checked={answers[currentQuestion.question_id] === option.id}
+                                            onChange={() => handleAnswerSelect(currentQuestion.question_id, option.id)}
+                                            className="h-4 w-4 text-brand-purple focus:ring-brand-purple border-gray-300"
+                                        />
+                                        <span className="ml-3 text-gray-700">{option.text}</span>
+                                    </label>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="text-center py-8 text-gray-500">
+                                <p>No options available for this question.</p>
+                            </div>
+                        )}
                     </div>
                     
                     {/* Navigation */}
-                    <div className="mt-8 flex justify-end">
+                    <div className="mt-8 flex justify-between">
+                        <button 
+                            onClick={() => setCurrentQuestionIndex(prev => Math.max(0, prev - 1))}
+                            disabled={currentQuestionIndex === 0}
+                            className={`px-6 py-2 font-semibold rounded-md ${
+                                currentQuestionIndex === 0 
+                                    ? 'bg-gray-300 cursor-not-allowed' 
+                                    : 'bg-gray-500 text-white hover:bg-gray-600'
+                            }`}
+                        >
+                            Previous
+                        </button>
+                        
                         {currentQuestionIndex === questions.length - 1 ? (
-                            <button onClick={handleSubmit} className="px-8 py-3 bg-green-600 text-white font-semibold rounded-md shadow-md hover:bg-green-700 transition-colors">
+                            <button 
+                                onClick={handleSubmit} 
+                                className="px-8 py-3 bg-green-600 text-white font-semibold rounded-md shadow-md hover:bg-green-700 transition-colors"
+                            >
                                 Submit Test
                             </button>
                         ) : (
-                            <button onClick={handleNext} className="px-8 py-3 bg-brand-purple text-white font-semibold rounded-md shadow-md hover:bg-opacity-90 transition-colors">
+                            <button 
+                                onClick={handleNext} 
+                                className="px-8 py-3 bg-brand-purple text-white font-semibold rounded-md shadow-md hover:bg-opacity-90 transition-colors"
+                            >
                                 Next
                             </button>
                         )}
                     </div>
                 </div>
             </div>
-            {isSubmitting && <ConfirmationModal onConfirm={confirmSubmit} onCancel={() => setIsSubmitting(false)} />}
+            {isSubmitting && (
+                <ConfirmationModal 
+                    onConfirm={confirmSubmit} 
+                    onCancel={() => setIsSubmitting(false)} 
+                />
+            )}
         </div>
     );
 };

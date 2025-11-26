@@ -4,6 +4,7 @@ namespace App\Repositories;
 
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use Exception;
 
 class StudentRepository
@@ -164,6 +165,7 @@ class StudentRepository
                 'users.mobile',
                 'users.city',
                 'users.address',
+                'users.photo_url',
                 'users.created_at',
                 'students.course_id',
                 'students.teacher_id',
@@ -218,7 +220,7 @@ class StudentRepository
         return DB::table('users')->where('mobile', $mobile)->exists();
     }
 
-     public function getAvailableTeachers()
+    public function getAvailableTeachers()
     {
         return DB::table('users')
             ->join('teachers', 'users.user_id', '=', 'teachers.user_id')
@@ -246,6 +248,127 @@ class StudentRepository
             ->select('affiliate_id', 'firm_name')
             ->get();
     }
+    public function updateStudentPhoto(int $userId, $image): array
+    {
+        try {
+            DB::beginTransaction();
 
-    
+            $user = DB::table('users')->where('user_id', $userId)->first();
+            if (!$user) {
+                throw new Exception('User not found');
+            }
+
+            // Upload the image
+            $imagePath = $this->uploadStudentImage($image);
+
+            // Update user's photo_url
+            $updated = DB::table('users')
+                ->where('user_id', $userId)
+                ->update([
+                    'photo_url' => $imagePath,
+                    'updated_at' => now()
+                ]);
+
+            if (!$updated) {
+                throw new Exception('Failed to update student photo');
+            }
+
+            DB::commit();
+
+            return [
+                'user_id' => $userId,
+                'photo_url' => $imagePath,
+                'photo_updated' => true
+            ];
+
+        } catch (Exception $e) {
+            DB::rollBack();
+            throw $e;
+        }
+    }
+
+    public function uploadStudentImage($image): string
+    {
+        try {
+            if (!$image) {
+                return null;
+            }
+
+            $filename = 'student_' . time() . '_' . uniqid() . '.' . $image->getClientOriginalExtension();
+
+            // Store the image in storage/app/public/students
+            $path = Storage::disk('public')->putFileAs('students', $image, $filename);
+
+            \Log::info('Student image stored correctly', [
+                'filename' => $filename,
+                'path' => $path,
+                'full_path' => Storage::disk('public')->path($path)
+            ]);
+
+            return 'storage/students/' . $filename;
+
+        } catch (Exception $e) {
+            \Log::error('Student image upload failed: ' . $e->getMessage());
+            throw new Exception('Failed to upload image: ' . $e->getMessage());
+        }
+    }
+
+   public function updateStudentProfile(int $userId, array $profileData): array
+{
+    try {
+        DB::beginTransaction();
+
+        $user = DB::table('users')->where('user_id', $userId)->first();
+        if (!$user) {
+            throw new Exception('User not found');
+        }
+
+        $student = DB::table('students')->where('user_id', $userId)->first();
+        if (!$student) {
+            throw new Exception('Student not found');
+        }
+
+        // Update user data - only profile-related fields
+        $userUpdateData = [
+            'name' => $profileData['name'],
+            'email' => $profileData['email'],
+            'mobile' => $profileData['mobile'] ?? $user->mobile,
+            'city' => $profileData['city'] ?? $user->city,
+            'address' => $profileData['address'] ?? $user->address,
+            'updated_at' => now()
+        ];
+
+        // Handle photo upload if provided
+        if (isset($profileData['photo']) && $profileData['photo'] instanceof \Illuminate\Http\UploadedFile) {
+            $userUpdateData['photo_url'] = $this->uploadStudentImage($profileData['photo']);
+            
+            // Delete old photo if exists
+            if ($user->photo_url && Storage::exists($user->photo_url)) {
+                Storage::delete($user->photo_url);
+            }
+        }
+
+        DB::table('users')->where('user_id', $userId)->update($userUpdateData);
+
+        // Update only student-specific profile data (not course/teacher related)
+        $studentUpdateData = [
+            'display_name_preference' => $profileData['display_name_preference'] ?? 'real_name',
+            'gender' => $profileData['gender'] ?? null,
+        ];
+
+        DB::table('students')->where('user_id', $userId)->update($studentUpdateData);
+
+        DB::commit();
+
+        return [
+            'user_id' => $userId,
+            'profile_updated' => true,
+            'photo_url' => $userUpdateData['photo_url'] ?? $user->photo_url
+        ];
+
+    } catch (Exception $e) {
+        DB::rollBack();
+        throw $e;
+    }
+}
 }
