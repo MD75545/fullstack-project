@@ -3,6 +3,7 @@
 use App\Http\Controllers\CourseController;
 use App\Http\Controllers\DemoBookingController;
 use App\Http\Controllers\PartnerController;
+use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\TaskController;
 use App\Http\Controllers\TeacherController;
 use App\Http\Controllers\TestCategoryController;
@@ -83,33 +84,33 @@ Route::post('/test-categories', [TestCategoryController::class, 'store']);
 Route::put('/test-categories/{categoryId}', [TestCategoryController::class, 'update']);
 Route::delete('/test-categories/{categoryId}', [TestCategoryController::class, 'destroy']);
 
-Route::get('/debug-commission/{demoId}', function ($demoId) {
-    $bookingRepo = new App\Repositories\DemoBookingRepository();
-    $paymentRepo = new App\Repositories\PaymentRepository();
+// Route::get('/debug-commission/{demoId}', function ($demoId) {
+//     $bookingRepo = new App\Repositories\DemoBookingRepository();
+//     $paymentRepo = new App\Repositories\PaymentRepository();
     
-    $booking = $bookingRepo->getDemoBookingById($demoId);
+//     $booking = $bookingRepo->getDemoBookingById($demoId);
     
-    if (!$booking) {
-        return response()->json(['error' => 'Booking not found'], 404);
-    }
+//     if (!$booking) {
+//         return response()->json(['error' => 'Booking not found'], 404);
+//     }
     
-    $affiliateDetails = $paymentRepo->getAffiliateDetails($booking->affiliate_id);
-    $commission = $paymentRepo->calculateCommission($booking->course_id, $booking->affiliate_id);
+//     $affiliateDetails = $paymentRepo->getAffiliateDetails($booking->affiliate_id);
+//     $commission = $paymentRepo->calculateCommission($booking->course_id, $booking->affiliate_id);
     
-    return response()->json([
-        'booking' => [
-            'demo_id' => $booking->demo_id,
-            'student_name' => $booking->student_name,
-            'course_id' => $booking->course_id,
-            'affiliate_id' => $booking->affiliate_id,
-        ],
-        'affiliate_details' => $affiliateDetails,
-        'commission_calculation' => [
-            'calculated_commission' => $commission,
-            'course_price' => \DB::table('courses')->where('course_id', $booking->course_id)->value('price'),
-        ]
-    ]);
-});
+//     return response()->json([
+//         'booking' => [
+//             'demo_id' => $booking->demo_id,
+//             'student_name' => $booking->student_name,
+//             'course_id' => $booking->course_id,
+//             'affiliate_id' => $booking->affiliate_id,
+//         ],
+//         'affiliate_details' => $affiliateDetails,
+//         'commission_calculation' => [
+//             'calculated_commission' => $commission,
+//             'course_price' => \DB::table('courses')->where('course_id', $booking->course_id)->value('price'),
+//         ]
+//     ]);
+// });
 
 // Auth routes
 Route::post('/login', [AuthController::class, 'login']);
@@ -138,3 +139,59 @@ Route::get('/tests/{testId}', [TestController::class, 'getTestWithQuestions']);
 Route::post('/test-results', [TestController::class, 'submitTestResult']);
 Route::get('/users/{userId}/test-results', [TestController::class, 'getUserTestResults']);
 Route::get('/test-results/{testResultId}', [TestController::class, 'getTestResultDetails']);
+
+
+// CONTEST ROUTES
+Route::get('/upcoming-contests', [TestController::class, 'getUpcomingContests']);
+Route::get('/completed-contests', [TestController::class, 'getCompletedContests']);
+Route::get('/contest-details/{contestId}', [TestController::class, 'getContestDetails']);
+Route::post('/contest/{contestId}/register', [TestController::class, 'registerForContest']);
+
+// routes/api.php - Add this at the top
+Route::get('/test', function () {
+    return response()->json([
+        'status' => 'online',
+        'service' => 'Laravel Backend',
+        'url' => request()->getHttpHost(),
+        'razorpay_ready' => true,
+        'timestamp' => now()->toDateTimeString()
+    ]);
+});
+
+// ==================== PAYMENT ROUTES ====================
+Route::prefix('payments')->group(function () {
+    // Create payment order for contest
+    Route::post('/contest/{contestId}/order', [PaymentController::class, 'createContestPaymentOrder']);
+    
+    // Verify payment
+    Route::post('/verify', [PaymentController::class, 'verifyPayment']);
+    
+    // Get payment status
+    Route::get('/{paymentId}/status', [PaymentController::class, 'getPaymentStatus']);
+    
+    // Get user payments
+    Route::get('/user/{userId}', [PaymentController::class, 'getUserPayments']);
+});
+
+// Test routes
+Route::get('/test', function () {
+    return response()->json([
+        'status' => 'online',
+        'service' => 'Laravel Backend',
+        'url' => request()->getHttpHost(),
+        'razorpay_ready' => true,
+        'timestamp' => now()->toDateTimeString()
+    ]);
+});
+
+// Test ngrok route
+Route::get('/test-ngrok', function () {
+    return response()->json([
+        'status' => 'online',
+        'service' => 'Laravel Backend via ngrok',
+        'url' => request()->getHttpHost(),
+        'razorpay_ready' => env('RAZORPAY_KEY_ID') ? true : false,
+        'frontend_url' => env('FRONTEND_URL'),
+        'timestamp' => now()->toDateTimeString()
+    ]);
+});

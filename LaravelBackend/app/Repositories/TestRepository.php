@@ -21,7 +21,7 @@ class TestRepository
             ->select(
                 'tests.test_id',
                 'tests.name',
-                'tests.category_id', 
+                'tests.category_id',
                 'tests.type',
                 'tests.duration_minutes',
                 'tests.start_time',
@@ -182,7 +182,7 @@ class TestRepository
             ->get();
     }
 
-     public function saveTestResult(array $resultData): array
+    public function saveTestResult(array $resultData): array
     {
         try {
             DB::beginTransaction();
@@ -312,4 +312,135 @@ class TestRepository
             'top_score' => $topScore,
         ];
     }
+
+    // CONTEST METHODS - UPDATED
+
+    public function getUpcomingContests()
+    {
+        return DB::table('tests')
+            ->select(
+                'tests.test_id',
+                'tests.name',
+                'tests.category_id',
+                'tests.type',
+                'tests.duration_minutes',
+                'tests.start_time',
+                'tests.entry_fee',
+                'tests.prize_money',
+                'tests.min_participants',
+                'tests.status',
+                'tests.current_participants',
+                'test_categories.test_category_id',
+                'test_categories.name as category_name'
+            )
+            ->leftJoin('test_categories', 'tests.category_id', '=', 'test_categories.test_category_id')
+            ->where('tests.type', 'contest')
+            ->where('tests.status', 'upcoming')
+            ->orderBy('tests.start_time', 'asc')
+            ->get();
+    }
+
+    public function getActiveContests()
+    {
+        return DB::table('tests')
+            ->select(
+                'tests.test_id',
+                'tests.name',
+                'tests.category_id',
+                'tests.type',
+                'tests.duration_minutes',
+                'tests.start_time',
+                'tests.entry_fee',
+                'tests.prize_money',
+                'tests.min_participants',
+                'tests.status',
+                'tests.current_participants'
+            )
+            ->where('tests.type', 'contest')
+            ->where('tests.status', 'active')
+            ->get();
+    }
+
+    public function getCompletedContests()
+    {
+        return DB::table('tests')
+            ->select(
+                'tests.test_id',
+                'tests.name',
+                'tests.category_id',
+                'tests.type',
+                'tests.duration_minutes',
+                'tests.start_time',
+                'tests.entry_fee',
+                'tests.prize_money',
+                'tests.min_participants',
+                'tests.status',
+                'tests.current_participants',
+                'test_categories.test_category_id',
+                'test_categories.name as category_name'
+            )
+            ->leftJoin('test_categories', 'tests.category_id', '=', 'test_categories.test_category_id')
+            ->where('tests.type', 'contest')
+            ->where('tests.status', 'completed')
+            ->orderBy('tests.start_time', 'desc')
+            ->get();
+    }
+
+    public function getContestById(int $contestId)
+    {
+        return DB::table('tests')
+            ->select(
+                'tests.test_id',
+                'tests.name',
+                'tests.category_id',
+                'tests.type',
+                'tests.duration_minutes',
+                'tests.start_time',
+                'tests.entry_fee',
+                'tests.prize_money',
+                'tests.min_participants',
+                'tests.status',
+                'tests.current_participants',
+                'test_categories.test_category_id',
+                'test_categories.name as category_name'
+            )
+            ->leftJoin('test_categories', 'tests.category_id', '=', 'test_categories.test_category_id')
+            ->where('tests.test_id', $contestId)
+            ->where('tests.type', 'contest')
+            ->first();
+    }
+
+    public function registerForContest(int $userId, int $contestId, float $paymentAmount = 0)
+{
+    return DB::table('contest_registrations')->insertGetId([
+        'user_id' => $userId,
+        'test_id' => $contestId,
+        'payment_id' => null, // Will be updated after payment
+        'registered_at' => now(),
+        'status' => 'registered'
+    ]);
+}
+
+
+    public function updateContestParticipants(int $contestId)
+    {
+        $count = DB::table('contest_registrations')
+            ->where('test_id', $contestId)
+            ->where('status', 'registered')
+            ->count();
+
+        DB::table('tests')
+            ->where('test_id', $contestId)
+            ->update(['current_participants' => $count]);
+
+        return $count;
+    }
+
+   public function checkUserContestRegistration(int $userId, int $contestId)
+{
+    return DB::table('contest_registrations')
+        ->where('user_id', $userId)
+        ->where('test_id', $contestId)
+        ->first();
+}
 }

@@ -1998,3 +1998,274 @@ export const getTestResultDetails = async (testResultId) => {
     throw error;
   }
 };
+
+// Add these to your api.js
+
+export const getUpcomingContests = async () => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/upcoming-contests`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+      },
+    });
+
+    let data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.message || 'Failed to fetch upcoming contests');
+    }
+
+    return data;
+    
+  } catch (error) {
+    console.error('Get Upcoming Contests Error:', error);
+    throw error;
+  }
+};
+
+export const getCompletedContests = async () => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/completed-contests`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+      },
+    });
+
+    let data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.message || 'Failed to fetch completed contests');
+    }
+
+    return data;
+    
+  } catch (error) {
+    console.error('Get Completed Contests Error:', error);
+    throw error;
+  }
+};
+
+export const getContestDetails = async (contestId) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/contest-details/${contestId}`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+      },
+    });
+
+    let data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.message || 'Failed to fetch contest details');
+    }
+
+    return data;
+    
+  } catch (error) {
+    console.error('Get Contest Details Error:', error);
+    throw error;
+  }
+};
+
+export const registerForContest = async (contestId, userId) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/contest/${contestId}/register`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({ user_id: userId }),
+    });
+
+    let data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.message || 'Failed to register for contest');
+    }
+
+    return data;
+    
+  } catch (error) {
+    console.error('Register For Contest Error:', error);
+    throw error;
+  }
+};
+
+// Payment API functions
+export const createContestPaymentOrder = async (contestId, userId) => {
+  try {
+    console.log('Creating payment order for contest:', contestId, 'user:', userId);
+    
+    const response = await fetch(`${API_BASE_URL}/payments/contest/${contestId}/order`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({ user_id: userId }),
+    });
+
+    console.log('Payment order response status:', response.status);
+
+    let data;
+    const contentType = response.headers.get('content-type');
+    
+    if (contentType && contentType.includes('application/json')) {
+      data = await response.json();
+    } else {
+      const text = await response.text();
+      throw new Error(`Unexpected response: ${text}`);
+    }
+
+    if (!response.ok) {
+      const errorMessage = data.message || 
+                          (data.errors ? Object.values(data.errors).flat().join(', ') : `HTTP error! status: ${response.status}`);
+      throw new Error(errorMessage);
+    }
+
+    console.log('Payment order response data:', data);
+    return data;
+    
+  } catch (error) {
+    console.error('Create Payment Order Error Details:', error);
+    
+    if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+      throw new Error('Network error: Cannot connect to the server. Make sure Laravel is running on port 8000.');
+    }
+    
+    throw error;
+  }
+};
+
+export const verifyPayment = async (paymentData) => {
+  try {
+    console.log('Verifying payment:', paymentData);
+    
+    const response = await fetch(`${API_BASE_URL}/payments/verify`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify(paymentData),
+    });
+
+    console.log('Verify payment response status:', response.status);
+
+    let data;
+    const contentType = response.headers.get('content-type');
+    
+    if (contentType && contentType.includes('application/json')) {
+      data = await response.json();
+    } else {
+      const text = await response.text();
+      throw new Error(`Unexpected response: ${text}`);
+    }
+
+    if (!response.ok) {
+      const errorMessage = data.message || 
+                          (data.errors ? Object.values(data.errors).flat().join(', ') : `HTTP error! status: ${response.status}`);
+      throw new Error(errorMessage);
+    }
+
+    console.log('Verify payment response data:', data);
+    return data;
+    
+  } catch (error) {
+    console.error('Verify Payment Error Details:', error);
+    
+    if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+      throw new Error('Network error: Cannot connect to the server. Make sure Laravel is running on port 8000.');
+    }
+    
+    throw error;
+  }
+};
+
+export const getPaymentStatus = async (paymentId) => {
+  try {
+    console.log('Getting payment status for:', paymentId);
+    
+    const response = await fetch(`${API_BASE_URL}/payments/${paymentId}/status`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+      },
+    });
+
+    console.log('Payment status response status:', response.status);
+
+    let data;
+    const contentType = response.headers.get('content-type');
+    
+    if (contentType && contentType.includes('application/json')) {
+      data = await response.json();
+    } else {
+      const text = await response.text();
+      throw new Error(`Unexpected response: ${text}`);
+    }
+
+    if (!response.ok) {
+      const errorMessage = data.message || `HTTP error! status: ${response.status}`;
+      throw new Error(errorMessage);
+    }
+
+    console.log('Payment status response data:', data);
+    return data;
+    
+  } catch (error) {
+    console.error('Get Payment Status Error Details:', error);
+    
+    if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+      throw new Error('Network error: Cannot connect to the server. Make sure Laravel is running on port 8000.');
+    }
+    
+    throw error;
+  }
+};
+
+export const getUserPayments = async (userId) => {
+  try {
+    console.log('Getting payments for user:', userId);
+    
+    const response = await fetch(`${API_BASE_URL}/payments/user/${userId}`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+      },
+    });
+
+    console.log('User payments response status:', response.status);
+
+    let data;
+    const contentType = response.headers.get('content-type');
+    
+    if (contentType && contentType.includes('application/json')) {
+      data = await response.json();
+    } else {
+      const text = await response.text();
+      throw new Error(`Unexpected response: ${text}`);
+    }
+
+    if (!response.ok) {
+      const errorMessage = data.message || `HTTP error! status: ${response.status}`;
+      throw new Error(errorMessage);
+    }
+
+    console.log('User payments response data:', data);
+    return data;
+    
+  } catch (error) {
+    console.error('Get User Payments Error Details:', error);
+    
+    if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+      throw new Error('Network error: Cannot connect to the server. Make sure Laravel is running on port 8000.');
+    }
+    
+    throw error;
+  }
+};

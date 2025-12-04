@@ -75,7 +75,7 @@ const ContestWinners: React.FC = () => {
     const contest = contests.find(c => c.id === id);
     const winners = contestWinners.filter(w => w.contestId === id);
     const topWinners = winners.filter(w => w.rank <= 3).sort((a, b) => a.rank - b.rank);
-    const currentUserRank = winners.find(w => w.userId === user?.id);
+    const currentUserRank = winners.find(w => w.userId === user?.user_id);
 
     if (!contest) {
         return <div className="text-center py-20"><h2 className="text-2xl font-bold">Contest not found</h2></div>;
