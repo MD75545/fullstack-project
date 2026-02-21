@@ -10,12 +10,13 @@
   },
   "dependencies": {
     "react": "^19.1.1",
-    "react-router-dom": "^7.9.3",
-    "react-dom": "^19.1.1"
+    "react-dom": "^19.1.1",
+    "react-router-dom": "^7.9.3"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
+    "baseline-browser-mapping": "^2.10.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
   }

@@ -184,6 +184,8 @@ Route::get('/test', function () {
     ]);
 });
 
+// Newpull
+
 // Test ngrok route
 Route::get('/test-ngrok', function () {
     return response()->json([
